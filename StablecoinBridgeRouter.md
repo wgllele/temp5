@@ -121,7 +121,7 @@ StablecoinBridgeRouter
 ### 4.1 调用前（同链）
 
 1. 确定 `tokenIn` / `tokenOut` / 数量。
-2. 选 `swapType`（或 `defaultSwapType`）。USDC↔USDT 小额用 `swapType=1`（NG，协议汇率更好）；大额用 `0`（3pool 深度）。
+2. 选 `swapType`。不要盲信 `defaultSwapType`（USDC↔USDT 总会给 3pool）。用 **`eth_call` 预执行比较各池报价**，再写入真正的 `execute`（见 5.2）。经验上小额 NG 更好、大额 3pool 更深，仍以当次 `eth_call` 为准。
 3. 选 `route` + `feeMode`，填 `methodType`。
 4. 固定费填 `swapFee`；比例费用 `FeeInfo.feeRate`，`swapFee` 保持 0 除非要硬上限。
 5. `getAmountOut` 估净兑出，设 `minAmountOut`。
@@ -217,7 +217,7 @@ UsdtOFT 调用全部内联汇编（无接口 import）：`quoteOFT` `0x0d35b415`
 | 3 | NG crvUSD/USDC | | `0x4DEcE678ceceb27446b35C672dC7d61F30bAD69E` |
 | 4 | NG USDC/RLUSD | | `0xD001aE433f254283FeCE51d4ACcE8c53263aa186` |
 
-`defaultSwapType` 只看币种、不看金额：DAI/USDC/USDT 一律返回 3pool；PYUSD/crvUSD/RLUSD 对 USDC 走对应 NG。USDC↔USDT 小额不要用这个默认值，应指定 `swapType=1` 走 NG 2pool（协议费更低）；大额再走 3pool 吃深度。币种索引运行时读 `coins(i)`，不写死 NG 下标。
+`defaultSwapType` 只看币种、不看金额：DAI/USDC/USDT 一律返回 3pool；PYUSD/crvUSD/RLUSD 对 USDC 走对应 NG。USDC↔USDT 不要依赖这个默认值，应 **`eth_call` 对各 `swapType` 询价后取优**（见 5.2）。币种索引运行时读 `coins(i)`，不写死 NG 下标。
 
 ### 5.1 主网 fork 实测（USDT→USDC，免 Router 协议费）
 
@@ -236,6 +236,28 @@ UsdtOFT 调用全部内联汇编（无接口 import）：`quoteOFT` `0x0d35b415`
 - Router 再加万分之一比例费时，总损耗约再加 1 bps：NG 小额约 4.30 bps（10→9.995699），3pool 大额约 5.15 bps（10000→9994.851242）。
 
 USDC→USDT 方向这次 NG/3pool 净额都能略多于本金（池内失衡），比的仍是池费率。大额应改走 3pool 是为了深度，避免 NG 浅池被大单打穿，不是因为 3pool 费率更低。
+
+### 5.2 用 `eth_call` 比较池价再选 `swapType`
+
+合约**不会**按金额自动选池。调用方在发交易前对同一笔 `SwapParam`（只改 `swapType`）做只读预执行，比较返回的兑出量，再把胜出的 `swapType` 交给真正的 `execute`。
+
+**推荐：`eth_call` `getAmountOut`**
+
+- 不花 gas、不需要用户已 `approve`、不改状态。
+- 只兑（route 0）：返回扣协议费后的 Curve `get_dy`。
+- 兑后跨链（route 1）：返回扣费、兑成 USDT 后再 `quoteOFT` 的目的链预计到账，同样可用来比 3pool vs NG。
+- 其它字段保持一致：`tokenIn` / `tokenOut` / `amountIn` / `methodType` / `swapFee` / `recipient` / `destChainId`。USDC↔USDT 至少打 `swapType=0` 和 `1` 各一次。
+- 取 **`getAmountOut` 更大** 的池。若两者接近但金额很大，可仍选 3pool，避免 NG 浅池被打穿（报价好、成交滑点却爆）。
+
+RPC 形态：`eth_call`，`to` 为本 Router，`data` 为 `getAmountOut(SwapParam)` 编码；`from` 任意即可。可对 `0`、`1` 并行两个 `eth_call`。
+
+**可选：`eth_call` `execute`（仿真成交）**
+
+- 返回值即本笔 `outAmount`（只兑为 `tokenOut`；跨链为 OFT 预计到账）。
+- 会走拉币 / 授权 / `exchange` / `send` 的校验，因此仿真时要用 **state override**：给 `from` 足够的 `tokenIn` 余额和对 Router 的 allowance；跨链再带上 `value = nativeFee`（可先 `eth_call` `quoteBridge` 取费）。
+- 适合在 `getAmountOut` 很接近、或要核对 `minAmountOut` / `destAmount` 时复核。节点若不支持 override，只用 `getAmountOut`。
+
+**跨链两步仍不变：** 先对选定的 `swapType` `quoteBridge`（或同样 `eth_call`），把 `nativeFee`、`minAmountLD` 写回，再 `execute{value: nativeFee}`。询价到发交易之间池会变，`minAmountOut` 按报价留滑点。
 
 ---
 

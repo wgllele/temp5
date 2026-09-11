@@ -3190,3 +3190,316 @@ Traces:
     └─ ← [Return]
 </pre>
 </details>
+
+---
+
+## 测试源码
+
+```solidity
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity >=0.8.13 <0.9.0;
+
+import {Test} from "forge-std/Test.sol";
+import {StablecoinBridgeRouter} from "StablecoinBridgeRouter.sol";
+
+interface IToken {
+    function balanceOf(address) external view returns (uint256);
+    function approve(address spender, uint256 amount) external;
+    function transfer(address to, uint256 amount) external;
+}
+
+/// @notice 小额 fork：本金 10 USDT/USDC，USDC↔USDT 走 NG（协议汇率更好）。
+/// Router：`0x079484864473dd4Fa291064723F3b307058778Ee`。
+contract StablecoinBridgeRouterSmallForkTest is Test {
+    address internal constant ROUTER_DEFAULT = 0x079484864473dd4Fa291064723F3b307058778Ee;
+    address internal constant BINANCE = 0x47ac0Fb4F2D84898e4D9E7b4DaB3C24507a6D503;
+
+    uint8 internal constant TYPE_NG = 1;
+    uint8 internal constant SWAP_FREE = 0x00;
+    uint8 internal constant SWAP_FIXED = 0x10;
+    uint8 internal constant SWAP_RATE = 0x20;
+    uint8 internal constant SWAP_BRIDGE_FREE = 0x01;
+    uint8 internal constant SWAP_BRIDGE_FIXED = 0x11;
+    uint8 internal constant SWAP_BRIDGE_RATE = 0x21;
+    uint8 internal constant BRIDGE_FREE = 0x02;
+
+    /// 小额 10 USDT/USDC（6 位小数）。
+    uint256 internal constant AMT = 10 * 1e6;
+    uint256 internal constant FEE = 1 * 1e6;
+    /// 万分之一：feeRate=100。
+    uint24 internal constant RATE_1_BPS = 100;
+
+    StablecoinBridgeRouter internal router;
+    IToken internal usdt;
+    IToken internal usdc;
+    address internal user;
+    address internal recipient;
+
+    function setUp() public {
+        if (ROUTER_DEFAULT.code.length == 0) {
+            string memory rpc = vm.envOr("ETH_RPC_URL", string("https://ethereum.publicnode.com"));
+            try vm.createSelectFork(rpc) {} catch {}
+        }
+        if (ROUTER_DEFAULT.code.length == 0) {
+            vm.createSelectFork("https://ethereum.publicnode.com");
+        }
+        require(ROUTER_DEFAULT.code.length > 0, "mainnet fork failed");
+
+        router = StablecoinBridgeRouter(payable(ROUTER_DEFAULT));
+        require(router.USDT() == router.DEFAULT_USDT(), "wrong chain");
+
+        usdt = IToken(router.USDT());
+        usdc = IToken(router.USDC());
+        user = makeAddr("user");
+        recipient = makeAddr("recipient");
+        vm.deal(user, 1 ether);
+    }
+
+    function _fundUsdt(uint256 amount) internal {
+        deal(address(usdt), user, amount, true);
+        if (usdt.balanceOf(user) >= amount) return;
+        vm.prank(BINANCE);
+        usdt.transfer(user, amount);
+        require(usdt.balanceOf(user) >= amount, "fund failed");
+    }
+
+    function _approve(uint256 amount) internal {
+        vm.startPrank(user);
+        usdt.approve(address(router), 0);
+        usdt.approve(address(router), amount);
+        vm.stopPrank();
+    }
+
+    function _setRate(uint24 rate) internal {
+        vm.prank(router.owner());
+        router.setFeeInfo(StablecoinBridgeRouter.FeeInfo({feeRate: rate, feeRecipient: recipient}));
+    }
+
+    function _param(uint8 methodType, uint256 amountIn, uint208 swapFee)
+        internal
+        view
+        returns (StablecoinBridgeRouter.SwapParam memory p)
+    {
+        p.swapType = TYPE_NG;
+        p.methodType = methodType;
+        p.swapFee = swapFee;
+        p.tokenIn = address(usdt);
+        p.tokenOut = address(usdc);
+        p.recipient = recipient;
+        p.amountIn = amountIn;
+        p.destChainId = 728126428;
+    }
+
+    function _expectedFee(uint8 methodType, uint256 amountIn, uint208 swapFee) internal view returns (uint256) {
+        uint8 mode = methodType >> 4;
+        if (mode == 1) return uint256(swapFee);
+        if (mode == 2) {
+            return (amountIn * router.feeInfo().feeRate) / 1_000_000;
+        }
+        return 0;
+    }
+
+    function _fillOftQuote(StablecoinBridgeRouter.SwapParam memory p)
+        internal
+        view
+        returns (StablecoinBridgeRouter.SwapParam memory)
+    {
+        (, uint256 nativeFee, uint256 minLd) = router.quoteBridge(p);
+        p.nativeFee = nativeFee;
+        p.destAmount = minLd;
+        return p;
+    }
+
+    function _fundUsdc(uint256 amount) internal {
+        deal(address(usdc), user, amount, true);
+    }
+
+    function _approveUsdc(uint256 amount) internal {
+        vm.startPrank(user);
+        usdc.approve(address(router), 0);
+        usdc.approve(address(router), amount);
+        vm.stopPrank();
+    }
+
+    function _execUsdtUsdc(uint8 methodType, uint256 amountIn, uint208 swapFee) internal returns (uint256 outAmt) {
+        _fundUsdt(amountIn);
+        _approve(amountIn);
+
+        StablecoinBridgeRouter.SwapParam memory p = _param(methodType, amountIn, swapFee);
+        uint256 quote = router.getAmountOut(p);
+        require(quote > 0, "quote=0");
+        p.minAmountOut = quote * 99 / 100;
+
+        uint256 usdcBefore = usdc.balanceOf(recipient);
+        uint256 fee = _expectedFee(methodType, amountIn, swapFee);
+
+        vm.prank(user);
+        outAmt = router.execute(p);
+
+        assertApproxEqAbs(outAmt, quote, 2);
+        assertEq(usdc.balanceOf(recipient) - usdcBefore, outAmt);
+        assertEq(usdt.balanceOf(address(router)), fee);
+    }
+
+    function _execUsdcUsdtBridge(uint8 methodType, uint256 amountIn, uint208 swapFee)
+        internal
+        returns (uint256 outAmt)
+    {
+        _fundUsdc(amountIn);
+        _approveUsdc(amountIn);
+        StablecoinBridgeRouter.SwapParam memory p = _param(methodType, amountIn, swapFee);
+        p.tokenIn = address(usdc);
+        p.tokenOut = address(usdt);
+        p.minAmountOut = 1;
+        p = _fillOftQuote(p);
+        uint256 quote = router.getAmountOut(p);
+        vm.prank(user);
+        outAmt = router.execute{value: p.nativeFee}(p);
+        assertApproxEqAbs(outAmt, quote, 2);
+        assertEq(usdc.balanceOf(address(router)), _expectedFee(methodType, amountIn, swapFee));
+    }
+
+    function _execUsdtBridge(uint8 methodType, uint256 amountIn, uint208 swapFee) internal returns (uint256 outAmt) {
+        _fundUsdt(amountIn);
+        _approve(amountIn);
+        StablecoinBridgeRouter.SwapParam memory p = _param(methodType, amountIn, swapFee);
+        p.tokenOut = address(usdt);
+        p = _fillOftQuote(p);
+        uint256 quote = router.getAmountOut(p);
+        vm.prank(user);
+        outAmt = router.execute{value: p.nativeFee}(p);
+        assertApproxEqAbs(outAmt, quote, 2);
+        assertEq(usdt.balanceOf(address(router)), _expectedFee(methodType, amountIn, swapFee));
+    }
+
+    function test_Ng_SwapRate() public {
+        _setRate(RATE_1_BPS);
+        _execUsdtUsdc(SWAP_RATE, AMT, 0);
+    }
+
+    function test_Ng_SwapFixed() public {
+        _execUsdtUsdc(SWAP_FIXED, AMT + FEE, uint208(FEE));
+    }
+
+    function test_Ng_SwapFree() public {
+        _execUsdtUsdc(SWAP_FREE, AMT, 0);
+    }
+
+    function test_Ng_SwapBridgeRate() public {
+        _setRate(RATE_1_BPS);
+        _execUsdcUsdtBridge(SWAP_BRIDGE_RATE, AMT, 0);
+    }
+
+    function test_Ng_SwapBridgeFixed() public {
+        _execUsdcUsdtBridge(SWAP_BRIDGE_FIXED, AMT + FEE, uint208(FEE));
+    }
+
+    function test_Ng_SwapBridgeFree() public {
+        _execUsdcUsdtBridge(SWAP_BRIDGE_FREE, AMT, 0);
+    }
+
+    function test_Ng_BridgeUsdtFree() public {
+        _execUsdtBridge(BRIDGE_FREE, AMT, 0);
+    }
+
+    function test_Ng_RecipientZeroGoesToSender() public {
+        _fundUsdt(AMT);
+        _approve(AMT);
+        StablecoinBridgeRouter.SwapParam memory p = _param(SWAP_FREE, AMT, 0);
+        p.recipient = address(0);
+        p.minAmountOut = router.getAmountOut(p) * 99 / 100;
+        uint256 before = usdc.balanceOf(user);
+        vm.prank(user);
+        uint256 outAmt = router.execute(p);
+        assertEq(usdc.balanceOf(user) - before, outAmt);
+        assertEq(usdc.balanceOf(recipient), 0);
+    }
+
+    function test_Ng_SlippageReverts() public {
+        _fundUsdt(AMT);
+        _approve(AMT);
+        StablecoinBridgeRouter.SwapParam memory p = _param(SWAP_FREE, AMT, 0);
+        uint256 quote = router.getAmountOut(p);
+        p.minAmountOut = quote + 1;
+        vm.prank(user);
+        vm.expectRevert();
+        router.execute(p);
+    }
+
+    function test_Ng_FeeExceedsAmount() public {
+        _fundUsdt(FEE);
+        _approve(FEE);
+        StablecoinBridgeRouter.SwapParam memory p = _param(SWAP_FIXED, FEE, uint208(FEE + 1));
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(StablecoinBridgeRouter.FeeExceedsAmount.selector, FEE + 1, FEE));
+        router.execute(p);
+    }
+
+    function test_Ng_SameTokenReverts() public {
+        _fundUsdt(AMT);
+        _approve(AMT);
+        StablecoinBridgeRouter.SwapParam memory p = _param(SWAP_FREE, AMT, 0);
+        p.tokenOut = address(usdt);
+        vm.prank(user);
+        vm.expectRevert(StablecoinBridgeRouter.SameToken.selector);
+        router.execute(p);
+    }
+
+    function test_Ng_RateZeroActsFree() public {
+        _setRate(0);
+        _execUsdtUsdc(SWAP_RATE, AMT, 0);
+    }
+
+    function test_RateFeeCapViaSwapFee() public {
+        _setRate(RATE_1_BPS);
+        StablecoinBridgeRouter.SwapParam memory p = _param(SWAP_RATE, AMT, 9);
+        vm.expectRevert(abi.encodeWithSelector(StablecoinBridgeRouter.FeeExceedsAmount.selector, 1_000, 9));
+        router.getAmountOut(p);
+    }
+
+    function test_SwapRejectsMsgValue() public {
+        _fundUsdt(AMT);
+        _approve(AMT);
+        StablecoinBridgeRouter.SwapParam memory p = _param(SWAP_FREE, AMT, 0);
+        p.minAmountOut = 1;
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(StablecoinBridgeRouter.NativeFeeMismatch.selector, uint256(0), uint256(1)));
+        router.execute{value: 1}(p);
+    }
+
+    function test_BridgeRejectsWrongNativeFee() public {
+        _fundUsdt(AMT);
+        _approve(AMT);
+        StablecoinBridgeRouter.SwapParam memory p = _param(BRIDGE_FREE, AMT, 0);
+        p.tokenOut = address(usdt);
+        p = _fillOftQuote(p);
+        vm.prank(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(StablecoinBridgeRouter.NativeFeeMismatch.selector, p.nativeFee, p.nativeFee + 1)
+        );
+        router.execute{value: p.nativeFee + 1}(p);
+    }
+
+    function test_DestAmountTooLowReverts() public {
+        _fundUsdt(AMT);
+        _approve(AMT);
+        StablecoinBridgeRouter.SwapParam memory p = _param(BRIDGE_FREE, AMT, 0);
+        p.tokenOut = address(usdt);
+        p = _fillOftQuote(p);
+        uint256 quotedOut = router.getAmountOut(p);
+        p.destAmount = 1;
+        uint256 minOk = (quotedOut * router.OFT_MIN_BPS()) / 10_000;
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(StablecoinBridgeRouter.Slippage.selector, uint256(1), minOk));
+        router.execute{value: p.nativeFee}(p);
+    }
+
+    function test_BridgeRequiresRecipient() public {
+        StablecoinBridgeRouter.SwapParam memory p = _param(BRIDGE_FREE, AMT, 0);
+        p.tokenOut = address(usdt);
+        p.recipient = address(0);
+        vm.expectRevert(StablecoinBridgeRouter.ZeroAddress.selector);
+        router.quoteBridge(p);
+    }
+}
+```
