@@ -1,6 +1,6 @@
 # StablecoinBridgeRouter 前端对接
 
-面向钱包 / DApp / 后台发交易。合约实现与审计见 [StablecoinBridgeRouter.md](./StablecoinBridgeRouter.md)。
+面向钱包 / DApp / 后台发交易。主网参数与业务流程见 [StablecoinBridgeRouter.md](./StablecoinBridgeRouter.md)。
 
 **主网 Router：** `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（Ethereum `chainId = 1`）  
 **旧地址 `0x0794…` ABI 已废弃**，不要再用 `feeMode` / `swapFee` / 结构体 `SwapParam`。
