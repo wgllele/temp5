@@ -2,9 +2,12 @@
 
 Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)。前端对接见 [StablecoinBridgeRouter.frontend.md](./StablecoinBridgeRouter.frontend.md)。
 
-单笔路由：从调用方拉入 `tokenIn`（仅列出的稳定币），先划出协议费并留在本合约，再做 Curve 兑换或 UsdtOFT 跨链。失败则整笔回滚；累计手续费与滞留资产由 owner `claimFee` 提出。
+单笔路由：从调用方拉入 `tokenIn`（仅列出的稳定币），先划出协议费并留在本合约。三条路径都是 **approve 本合约 + execute**（用户不直接调 Curve / OFT）：
 
-跨链（methodType 1/2）必须先 `quote`，把返回的 `outAmount`、`nativeFee` 写入 `execute` 的 `destAmount` / `nativeFee`，再 `execute{value: nativeFee}`。`execute` **不再**链上 `quoteSend`；`msg.value` 必须 **等于** `nativeFee`（只兑必须为 0），合约 **不退** 多余 ETH。
+- **methodType=0 只兑不跨**：扣 2 bps，合约内调 Curve，`tokenOut` 留在以太坊；`msg.value` 必须为 0。
+- **methodType=1 兑后跨链** / **2 只跨链**：同样先扣 2 bps，再 UsdtOFT 到波场。
+
+失败则整笔回滚；累计手续费与滞留资产由 owner `claimFee` 提出。跨链必须先 `quote`，把返回的 `outAmount`、`nativeFee` 写入 `execute` 的 `destAmount` / `nativeFee`，再 `execute{value: nativeFee}`。`execute` **不再**链上 `quoteSend`；`msg.value` 必须 **等于** `nativeFee`（只兑必须为 0），合约 **不退** 多余 ETH。
 
 主网已部署 Router：`0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`。常量 `ACROSS_PROTOCOL` 实际是主网 UsdtOFT `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0`（USDT0 Legacy Mesh），不是 Across SpokePool。旧地址 `0x0794…` ABI 已废弃。
 
@@ -12,29 +15,37 @@ Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 
 ## 1. 业务架构
 
-本合约是调用方与外部市场之间的一层：收费、选池、兑换、转出。用户本金当笔进出；协议费留在合约内直至管理员提取。
+本合约是调用方与外部市场之间的一层：收费、选池、兑换、转出。用户本金当笔进出；协议费留在合约内直至管理员提取。**以太坊不跨链只兑换也走本合约**（`methodType=0`），同样扣 2 bps，不要让用户直对 Curve。
 
 ```
                     ┌─────────────┐
                     │    owner    │  setOwner / setFeeRecipient / claimFee
                     └──────┬──────┘
                            │
-调用方 ──approve──► ┌──────▼──────────────────────────┐
-                    │     StablecoinBridgeRouter      │
-                    │  拉币 → 划费留存 → 兑换和/或转出 │
-                    └───┬──────────┬──────────┬───────┘
-                        │          │          │
-                        ▼          ▼          ▼
-                   手续费留存    Curve 池   UsdtOFT.send
-                   （claimFee）  （兑换）    （quote 参数原样传入）
-                        │          │
-                        │          ▼
-                        │     recipient / 目的链 OFT to
+调用方 ──① approve──►┌────▼────────────────────────────┐
+        ──② execute──►│      StablecoinBridgeRouter      │
+                      │  拉币 → 划 2 bps 留存（claimFee） │
+                      └────┬─────────────────┬──────────┘
+                     0 只兑│            1/2 跨链│
+                           ▼                    ▼
+              ┌────────────────────┐   ┌─────────────────┐
+              │ 内调 Curve         │   │ 1：先兑成 USDT   │
+              │ 以太坊 tokenOut    │   │ 2：USDT 直发     │
+              │ 给 recipient       │   │ UsdtOFT.send    │
+              │ 不跨链、已收费     │   └────────┬────────┘
+              └────────────────────┘            ▼
+                                       波场收款 USDT
 ```
+
+| 路径 | methodType | 用户签名 | 资金终点 |
+|---|---|---|---|
+| 以太坊只兑不跨（收费） | `0` | `approve(Router)` + `execute` `msg.value=0` | 以太坊 `tokenOut` |
+| 先兑后跨到波场 | `1` | `approve(Router)` + `execute{value: nativeFee}` | 波场 USDT |
+| USDT 直跨到波场 | `2` | 同上 | 波场 USDT |
 
 | 角色 | 职责 |
 |---|---|
-| 调用方 `msg.sender` | 事先 `approve`；跨链先 `quote` 填 `nativeFee`/`destAmount`，再 `execute{value: nativeFee}` |
+| 调用方 `msg.sender` | 事先 `approve` Router。只兑：`execute` 且 `msg.value=0`。跨链：先 `quote` 填 `nativeFee`/`destAmount`，再 `execute{value: nativeFee}` |
 | owner | 改管理员、写 `feeRecipient`、把本合约内累计手续费与滞留资产 `claimFee` 到 `feeRecipient` |
 | `feeRecipient` | 仅 `claimFee` 时的收款地址；交易过程不向外转手续费 |
 | Curve 3pool / NG | 同链稳定币兑换 |
@@ -44,8 +55,8 @@ Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 
 ```
 StablecoinBridgeRouter
-├── 报价：quote（只兑为 Curve 净兑出；跨链为 OFT 到账 + nativeFee）
-├── 执行：execute（payable + nonReentrant）
+├── 报价：quote（0 只兑 = 扣费后 Curve 净兑出、nativeFee=0；跨链 = OFT 到账 + nativeFee）
+├── 执行：execute（0 只兑 value=0 兑给 recipient；1/2 跨链再 send）
 ├── 治理：owner / setOwner / setFeeRecipient / claimFee
 └── 代币：汇编 transfer / transferFrom / approve / balanceOf；receive/fallback payable
 ```
@@ -74,7 +85,7 @@ StablecoinBridgeRouter
 
 | 场景 | methodType | 说明 |
 |---|---|---|
-| 本链 USDT→USDC | `0` | 先扣 2 bps，净额再兑，打给 `recipient` |
+| 以太坊只兑不跨（收费） | `0` | 先扣 2 bps，净额内调 Curve，`tokenOut` 打给以太坊 `recipient`；不跨链 |
 | 兑 USDT 后跨链 / 仅跨链 | `1` / `2` | 同样先扣 2 bps；先 `quote` 再带 ETH 调 `execute` |
 
 ---
@@ -98,16 +109,40 @@ StablecoinBridgeRouter
 
 ## 4. 业务流程
 
-### 4.1 调用前（同链）
+### 4.1 调用前
 
 1. 确定 `tokenIn` / `tokenOut` / 数量。
 2. 选 `swapType`。用 **`eth_call` `quote` 比较各池**，再写入真正的 `execute`（见 5.2）。经验上小额 NG 更好、大额 3pool 更深，仍以当次 `eth_call` 为准。
-3. 填 `methodType`（0/1/2）。协议费固定 2 bps。
+3. 填 `methodType`（0 只兑 / 1 兑后跨 / 2 只跨）。协议费固定 2 bps。
 4. `quote` 估净兑出，设 `minAmountOut`。
-5. `approve(tokenIn, amountIn)` 给 **Router**（不是 UsdtOFT）。
-6. methodType 0：`execute` 且 `msg.value == 0`。methodType 1/2：见 4.4。
+5. `approve(tokenIn, amountIn)` 给 **Router**（不是 Curve、不是 UsdtOFT）。
+6. methodType 0：见 4.1.1。methodType 1/2：见 4.4。
 
 代币须在白名单：DAI / USDC / USDT / PYUSD / crvUSD / RLUSD。
+
+### 4.1.1 以太坊只兑不跨（methodType=0）
+
+不跨链、只兑换时也必须走本合约并收费。用户只对 Router 签两笔：`approve` + `execute`。Router 先从 `tokenIn` 扣 **2 bps**，再内调 Curve，把 `tokenOut` 打给 `recipient`（`0` 视为 `msg.sender`）。**不要**让用户 `approve` / `exchange` 官方池。
+
+```
+quote 比池（只读，nativeFee=0）
+        │
+tokenIn.approve(Router, amountIn)
+        │
+execute  methodType=0  value=0
+        │
+拉币 → 划 2 bps → 内调 Curve → tokenOut 转给以太坊 recipient
+```
+
+| 顺序 | 动作 | 签名 |
+|---|---|---|
+| 0 | `quote` 比池（3pool / NG），记下 `outAmount`；`nativeFee` 为 0 | 否 |
+| 1 | `tokenIn.approve(Router, amountIn)` | 是 |
+| 2 | `execute methodType=0`：`msg.value=0`，`destAmount=0`，`nativeFee=0` | 是 |
+
+- `minAmountOut` 按 `quote.outAmount` 留滑点。
+- 多带 1 wei 也会 `NativeFeeMismatch`。
+- `destChainId` / `destToken` 本路径不校验；可填 `728126428` / `0`。
 
 ### 4.2 `execute` 主流程
 
