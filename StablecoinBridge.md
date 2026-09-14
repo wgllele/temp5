@@ -19,39 +19,40 @@
 ```
 波场                                              以太坊
 ┌─────────────────────┐                          ┌─────────────────────┐
-│ 用户钱包             │                          │ 到账 USDT            │
-│ TRC20 USDT          │                          └──────────┬──────────┘
-└──────────┬──────────┘                                     │
-           │ ① approve                                      │
-           │ ② execute                       回波场 ①②      │ 跨链已结束（可选）
-           ▼                                    │           │ 不走 Router
-┌─────────────────────┐                         ▼           │
-│ 我们的跨链合约       │                          ┌─────────┴───────────┐
-│ BridgeTron          │◄════ LayerZero / ═══════►│ 我们的跨链合约       │
-│ 只跨，不兑，扣 2 bps │     USDT0 Mesh           │ Router              │
-└──────────┬──────────┘                          │ 1 合约内 Curve 再跨 │
-           │                                     │ 2 USDT 直跨         │
-           ▼                                     └──────────┬──────────┘
-┌─────────────────────┐                                     │
-│ UsdtOFT             │                                     ▼
-└─────────────────────┘                                波场收款 USDT
+│ 用户钱包             │                          │ 用户钱包             │
+│ TRC20 USDT          │                          │ USDT（含波场到账）   │
+└──────────┬──────────┘                          └──────────┬──────────┘
+           │ ① approve                                      │ ① approve
+           │ ② execute                                      │ ② execute
+           ▼                                                ▼
+┌─────────────────────┐                          ┌─────────────────────┐
+│ 我们的跨链合约       │                          │ 我们的跨链合约       │
+│ BridgeTron          │◄════ LayerZero / ═══════►│ Router              │
+│ 只跨，不兑，扣 2 bps │     USDT0 Mesh           │ 1 合约内 Curve 再跨 │
+└──────────┬──────────┘                          │ 2 USDT 直跨         │
+           │                                     └──────────┬──────────┘
+           ▼                                                │
+┌─────────────────────┐                                     ▼
+│ UsdtOFT             │                                波场收款 USDT
+└─────────────────────┘
            │
-           │  波场 USDT ──send──► 以太坊到账 USDT
+           │  波场 USDT ──send──► 以太坊用户钱包
            │  以太坊 USDT ──send──► 波场收款
            │
-           │                                     ┌─────────────────────┐
-           └────────────────────────────────────►│ Curve 官方 3pool     │
-                                                 │ ① approve 3pool     │
-                                                 │ ② exchange          │
-                                                 └──────────┬──────────┘
-                                                            ▼
-                                                      以太坊 USDC 等
-                                                      （仍留在以太坊）
+           │  跨链已结束（可选，不走 Router）
+           ▼
+┌─────────────────────┐
+│ Curve 官方 3pool     │
+│ ① approve 3pool     │
+│ ② exchange          │
+└──────────┬──────────┘
+           ▼
+     以太坊 USDC 等（仍留在以太坊）
 ```
 
 | 路径 | 用户 approve 对象 | 第二笔签名 | swap | 资金终点 |
 |---|---|---|---|---|
-| 波场 → 以太坊 | `StablecoinBridgeTron` | `execute`（垫 `nativeFee` / sun） | 无 | 上图「到账 USDT」 |
+| 波场 → 以太坊 | `StablecoinBridgeTron` | `execute`（垫 `nativeFee` / sun） | 无 | 以太坊用户钱包 USDT |
 | 到账后再兑（上图向下） | Curve 3pool 官方池 | `exchange(i,j,dx,min_dy)` | **不走我们的合约** | 仍在以太坊 |
 | 以太坊 → 波场 · 先兑后跨 | `StablecoinBridgeRouter` | `execute{value: nativeFee}` `methodType=1` | **走我们的合约**，Router 内调 Curve | 波场 USDT |
 | 以太坊 → 波场 · 直跨 | `StablecoinBridgeRouter` | `execute{value: nativeFee}` `methodType=2` | 无 | 波场 USDT |
@@ -90,7 +91,7 @@ execute{value: nativeFee}
 
 ## 3. 波场到以太坊之后再 swap（不走我们的合约）
 
-即总图里从「到账 USDT」再往下的那一支。跨链已经结束。用户对 **Curve 官方 3pool** 授权并成交，**不要** `approve` Router。
+即总图里从以太坊用户钱包再往下的那一支。跨链已经结束。用户对 **Curve 官方 3pool** 授权并成交，**不要** `approve` Router。
 
 ```
 get_dy（只读）

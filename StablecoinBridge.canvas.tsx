@@ -143,7 +143,7 @@ export default function TronEthCrosschainArchitecture() {
       <Stack gap={8}>
         <H3>到账后再兑</H3>
         <Text>
-          总图里从「到账 USDT」向下那一支：官方池 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7，
+          总图里从以太坊用户钱包向下那一支：官方池 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7，
           approve + exchange，不走 Router。回波场要兑则走 Router methodType=1，不要先走这支再跨。
         </Text>
       </Stack>
@@ -163,7 +163,7 @@ function PathDetail({
       <Stack gap={10}>
         <H2>波场 → 以太坊</H2>
         <Text tone="secondary">
-          波场侧没有兑换。到账后若要 USDC，沿总图从「到账 USDT」往下走官方 Curve。
+          波场侧没有兑换。到账后若要 USDC，沿总图从以太坊用户钱包再往下走官方 Curve。
         </Text>
         <Table
           headers={["顺序", "动作", "签名"]}
@@ -263,7 +263,7 @@ function ArchitectureMap({
         <Box x={24} y={136} w={250} h={70} c={tronBridge} title="我们的跨链合约" sub="BridgeTron · 只跨不兑 · 扣 2 bps" />
         <Box x={24} y={236} w={250} h={66} c={oft} title="UsdtOFT" sub="send / 到账" />
 
-        <Box x={706} y={40} w={250} h={66} c={ethUser} title="到账 USDT" sub="跨链终点" />
+        <Box x={706} y={40} w={250} h={66} c={ethUser} title="用户钱包" sub="USDT · 含波场到账" />
         <Box
           x={706}
           y={136}
@@ -286,36 +286,36 @@ function ArchitectureMap({
           y1={106}
           x2={149}
           y2={136}
-          color={t.accent.primary}
+          color={path === "tron-to-eth" ? t.accent.primary : t.stroke.secondary}
           label="① approve  ② execute"
           labelX={158}
           labelY={126}
           theme={t}
-          show={path === "tron-to-eth"}
+          show
         />
         <Arrow
           x1={149}
           y1={206}
           x2={149}
           y2={236}
-          color={t.accent.primary}
+          color={path === "tron-to-eth" ? t.accent.primary : t.stroke.secondary}
           label=""
           labelX={0}
           labelY={0}
           theme={t}
-          show={path === "tron-to-eth"}
+          show
         />
         <Arrow
           x1={831}
           y1={106}
           x2={831}
           y2={136}
-          color={t.accent.primary}
-          label="回波场 ①②"
-          labelX={560}
+          color={path === "eth-to-tron" ? t.accent.primary : t.stroke.secondary}
+          label="① approve  ② execute"
+          labelX={848}
           labelY={126}
           theme={t}
-          show={path === "eth-to-tron"}
+          show
         />
 
         <line
