@@ -1,11 +1,12 @@
 # 波场 ↔ 以太坊 跨链业务架构
 
-跨链两边都是 **approve 我们的合约 + execute**，两次签名。`quote` 为只读。协议费固定 **2 bps**（从 `tokenIn` 先扣，留在合约，owner `claimFee`）。跨链资产仅为 **USDT**，通道为 UsdtOFT / LayerZero V2 Legacy Mesh。
+跨链和以太坊只兑都是 **approve 我们的合约 + execute**，两次签名。`quote` 为只读。协议费固定 **2 bps**（从 `tokenIn` 先扣，留在合约，owner `claimFee`）。跨链资产仅为 **USDT**，通道为 UsdtOFT / LayerZero V2 Legacy Mesh。
 
 **谁做 swap：**
 
-- **以太坊 → 波场** 需要兑换：走我们的 `StablecoinBridgeRouter`（`methodType=1`），用户不直接调 Curve。
-- **波场 → 以太坊之后** 再兑换：不走我们的合约，用户直接对 Curve 官方池 `approve` + `exchange`。
+- **以太坊只兑、不跨链**：走我们的 `StablecoinBridgeRouter`（`methodType=0`），扣 2 bps，合约内调 Curve。
+- **以太坊 → 波场** 需要兑换：同样走 Router（`methodType=1`），用户不直接调 Curve。
+- **波场 → 以太坊之后** 再兑换、且不经过我们收费：用户直接对 Curve 官方池 `approve` + `exchange`。
 - 波场侧不 swap。
 
 合约文档：[StablecoinBridgeTron](./StablecoinBridgeTron.md)（波场→ETH，只跨）· [StablecoinBridgeRouter](./StablecoinBridgeRouter.md)（ETH→波场，兑和跨都走它）· [前端对接](./StablecoinBridgeRouter.frontend.md)
@@ -14,32 +15,32 @@
 
 ## 1. 总图
 
-一张图：上面是双向跨链（两边都是 ① approve ② execute），到账后再往下才是官方 Curve（可选，不走 Router）。
+一张图：上面走我们的合约（跨链或只兑，都是 ① approve ② execute）；不经过我们收费时，才从钱包再往下走官方 Curve。
 
 ```
 波场                                              以太坊
 ┌─────────────────────┐                          ┌─────────────────────┐
 │ 用户钱包             │                          │ 用户钱包             │
-│ TRC20 USDT          │                          │ USDT（含波场到账）   │
+│ TRC20 USDT          │                          │ USDT / USDC 等      │
 └──────────┬──────────┘                          └──────────┬──────────┘
            │ ① approve                                      │ ① approve
            │ ② execute                                      │ ② execute
            ▼                                                ▼
 ┌─────────────────────┐                          ┌─────────────────────┐
-│ 我们的跨链合约       │                          │ 我们的跨链合约       │
-│ BridgeTron          │◄════ LayerZero / ═══════►│ Router              │
-│ 只跨，不兑，扣 2 bps │     USDT0 Mesh           │ 1 合约内兑再跨 / 2 直跨│
+│ 我们的跨链合约       │                          │ 我们的合约 Router    │
+│ BridgeTron          │◄════ LayerZero / ═══════►│ 0 只兑（扣 2 bps）   │
+│ 只跨，不兑，扣 2 bps │     USDT0 Mesh           │ 1 兑后跨 / 2 直跨    │
 └──────────┬──────────┘                          └──────────┬──────────┘
            │                                                │
            ▼                                                ▼
-┌─────────────────────┐                                波场收款 USDT
-│ UsdtOFT             │
+┌─────────────────────┐                         0：以太坊 tokenOut
+│ UsdtOFT             │                         1/2：波场收款 USDT
 └─────────────────────┘
            │
            │  波场 USDT ──send──► 以太坊用户钱包
            │  以太坊 USDT ──send──► 波场收款
            │
-           │  跨链已结束（可选，不走 Router）
+           │  不走我们的合约、不收 2 bps（可选）
            ▼
 ┌─────────────────────┐
 │ Curve 官方 3pool     │
@@ -53,8 +54,9 @@
 | 路径 | 用户 approve 对象 | 第二笔签名 | swap | 资金终点 |
 |---|---|---|---|---|
 | 波场 → 以太坊 | `StablecoinBridgeTron` | `execute`（垫 `nativeFee` / sun） | 无 | 以太坊用户钱包 USDT |
-| 到账后再兑（上图向下） | Curve 3pool 官方池 | `exchange(i,j,dx,min_dy)` | **不走我们的合约** | 仍在以太坊 |
-| 以太坊 → 波场 · 先兑后跨 | `StablecoinBridgeRouter` | `execute{value: nativeFee}` `methodType=1` | **走我们的合约**，Router 内调 Curve | 波场 USDT |
+| 以太坊只兑不跨 | `StablecoinBridgeRouter` | `execute` `methodType=0`，`msg.value=0` | **走我们的合约**，扣 2 bps，内调 Curve | 以太坊 `tokenOut` |
+| 到账后再兑（上图向下） | Curve 3pool 官方池 | `exchange(i,j,dx,min_dy)` | **不走我们的合约**，不收 2 bps | 仍在以太坊 |
+| 以太坊 → 波场 · 先兑后跨 | `StablecoinBridgeRouter` | `execute{value: nativeFee}` `methodType=1` | **走我们的合约**，扣 2 bps，内调 Curve | 波场 USDT |
 | 以太坊 → 波场 · 直跨 | `StablecoinBridgeRouter` | `execute{value: nativeFee}` `methodType=2` | 无 | 波场 USDT |
 
 产品口径是两次签名。USDT 上若已有非 0 授权，须先 `approve(0)` 再 `approve(amount)`，会多一笔。`quote` / `get_dy` 不占签名。
@@ -63,7 +65,7 @@
 
 ## 2. 波场 → 以太坊
 
-波场侧**没有兑换**。到账以太坊后若还要换成 USDC 等，再走 §3（官方 Curve，不是 Router）。
+波场侧**没有兑换**。到账以太坊后若还要换成 USDC 等：走我们收费用 §4；不经过我们、直对官方池用 §3。
 
 ```
 quote（只读）
@@ -91,7 +93,9 @@ execute{value: nativeFee}
 
 ## 3. 波场到以太坊之后再 swap（不走我们的合约）
 
-即总图里从以太坊用户钱包再往下的那一支。跨链已经结束。用户对 **Curve 官方 3pool** 授权并成交，**不要** `approve` Router。
+即总图里从以太坊用户钱包再往下、直对官方池的那一支。跨链已经结束，**不收我们的 2 bps**。用户对 **Curve 官方 3pool** 授权并成交，**不要** `approve` Router。
+
+若希望由我们扣 2 bps 再兑，不要走本节，走 §4。
 
 ```
 get_dy（只读）
@@ -115,11 +119,37 @@ tokenIn.approve(3pool, dx)
 
 ---
 
-## 4. 以太坊 → 波场（兑和跨都走我们的合约）
+## 4. 以太坊只兑不跨（走我们的合约，收费）
+
+`methodType = 0`。用户只对 Router 签两笔：`approve` + `execute`。Router 先从 `tokenIn` 扣 **2 bps**，再内调 Curve，把 `tokenOut` 打给 `recipient`（`0` 视为 `msg.sender`）。**不跨链**，`msg.value` 必须为 **0**。
+
+```
+quote 比池（只读）
+    │
+tokenIn.approve(Router, amountIn)
+    │
+execute  methodType=0  value=0
+    │
+扣 2 bps → Router 调 Curve → tokenOut 留在以太坊
+```
+
+| 顺序 | 动作 | 签名 |
+|---|---|---|
+| 0 | `quote` 比池（3pool / NG），记下 `outAmount`；`nativeFee` 为 0 | 否 |
+| 1 | `tokenIn.approve(Router, amountIn)`（不是 3pool、不是 OFT） | 是 |
+| 2 | `execute methodType=0`：`msg.value=0`，`destAmount=0`，`nativeFee=0`；扣 2 bps 后兑给 `recipient` | 是 |
+
+- 白名单：DAI / USDC / USDT / PYUSD / crvUSD / RLUSD。
+- `minAmountOut` 按 `quote.outAmount` 留滑点。多带 1 wei 也会 `NativeFeeMismatch`。
+- 用户不要直接调 Curve；Curve 的 approve / exchange 由 Router 完成。
+
+---
+
+## 5. 以太坊 → 波场（兑和跨都走我们的合约）
 
 用户只对 Router 签两笔。需要 swap 时由 Router 在同一笔 `execute` 里调 Curve，**用户不要先单独调 3pool**。
 
-### 4.1 先交易后跨链（`methodType = 1`）
+### 5.1 先交易后跨链（`methodType = 1`）
 
 ```
 quote 比池（只读）
@@ -139,7 +169,7 @@ execute{value: nativeFee}  methodType=1
 
 `tokenOut` 必须是 USDT。跨链 `recipient` 为去掉 `41` 的波场 20 字节体（不要填 `T…` 字符串，也不要填带 `41` 的 21 字节）。
 
-### 4.2 直接跨链（`methodType = 2`）
+### 5.2 直接跨链（`methodType = 2`）
 
 `tokenIn` 必须是 USDT。不进 Curve。
 
@@ -163,7 +193,7 @@ execute{value: nativeFee}  methodType=2
 
 ---
 
-## 5. 合约与通道
+## 6. 合约与通道
 
 | 名 | 链 | 地址 / 值 |
 |---|---|---|
@@ -174,16 +204,16 @@ execute{value: nativeFee}  methodType=2
 | 波场 USDT | 波场 | `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t` |
 | 以太坊 USDT | 以太坊 | `0xdAC17F958D2ee523a2206206994597C13D831ec7` |
 | 以太坊 USDC | 以太坊 | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
-| 协议费 | 两边跨链合约 | `2 bps` |
+| 协议费 | Router / BridgeTron | `2 bps`（只兑、兑后跨、只跨都扣） |
 | OFT 到账下限 | 两边跨链合约 | 成交时 `quoteOFT` 的 99% |
 | LZ EID 以太坊 | | `30101` |
 | LZ EID 波场 | | `30420` |
 
-不要 `approve` UsdtOFT。ETH→波场的 swap 只 `approve` Router。波场→ETH 之后的 swap 只 `approve` Curve 官方池。波场侧不要做 swap。
+不要 `approve` UsdtOFT。走我们收费（只兑 / 兑后跨 / 直跨）只 `approve` Router。不经过我们、直对官方池才 `approve` 3pool。波场侧不要做 swap。
 
 ---
 
-## 6. 对接注意
+## 7. 对接注意
 
 - 询价到上链之间池 / Mesh 费会变；过期重新 `quote`。`destAmount` / `nativeFee` / `msg.value` 必须用当次 `quote` 原样回填。
 - `send` 之后不跟踪；到账按 UsdtOFT / LayerZero / Mesh，有延迟。
