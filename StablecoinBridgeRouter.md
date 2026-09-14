@@ -1,6 +1,6 @@
 # StablecoinBridgeRouter
 
-Solidity `>=0.8.28`。
+Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)。前端对接见 [StablecoinBridgeRouter.frontend.md](./StablecoinBridgeRouter.frontend.md)。
 
 单笔路由：从调用方拉入 `tokenIn`（仅列出的稳定币），先划出协议费并留在本合约，再做 Curve 兑换或 UsdtOFT 跨链。失败则整笔回滚；累计手续费与滞留资产由 owner `claimFee` 提出。
 
