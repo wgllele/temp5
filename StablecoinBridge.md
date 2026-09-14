@@ -8,47 +8,15 @@
 - **波场 → 以太坊之后** 再兑换：不走我们的合约，用户直接对 Curve 官方池 `approve` + `exchange`。
 - 波场侧不 swap。
 
-合约文档：[StablecoinBridgeTron](./StablecoinBridgeTron.md)（波场→ETH，只跨）· [StablecoinBridgeRouter](./StablecoinBridgeRouter.md)（ETH→波场，兑和跨都走它）· [前端对接](./StablecoinBridgeRouter.frontend.md) · 交互图：[StablecoinBridge.canvas.tsx](./StablecoinBridge.canvas.tsx)
+合约文档：[StablecoinBridgeTron](./StablecoinBridgeTron.md)（波场→ETH，只跨）· [StablecoinBridgeRouter](./StablecoinBridgeRouter.md)（ETH→波场，兑和跨都走它）· [前端对接](./StablecoinBridgeRouter.frontend.md)
 
 ---
 
 ## 1. 总图
 
-一张图：上面是双向跨链，到账 USDT 再往下才是官方 Curve（可选，不走 Router）。
+一张图：上面是双向跨链（两边都是 ① approve ② execute），到账后再往下才是官方 Curve（可选，不走 Router）。
 
-```
-波场                                              以太坊
-┌─────────────────────┐                          ┌─────────────────────┐
-│ 用户钱包             │                          │ 用户钱包             │
-│ TRC20 USDT          │                          │ USDT（含波场到账）   │
-└──────────┬──────────┘                          └──────────┬──────────┘
-           │ ① approve                                      │ ① approve
-           │ ② execute                                      │ ② execute
-           ▼                                                ▼
-┌─────────────────────┐                          ┌─────────────────────┐
-│ 我们的跨链合约       │                          │ 我们的跨链合约       │
-│ BridgeTron          │◄════ LayerZero / ═══════►│ Router              │
-│ 只跨，不兑，扣 2 bps │     USDT0 Mesh           │ 1 合约内 Curve 再跨 │
-└──────────┬──────────┘                          │ 2 USDT 直跨         │
-           │                                     └──────────┬──────────┘
-           ▼                                                │
-┌─────────────────────┐                                     ▼
-│ UsdtOFT             │                                波场收款 USDT
-└─────────────────────┘
-           │
-           │  波场 USDT ──send──► 以太坊用户钱包
-           │  以太坊 USDT ──send──► 波场收款
-           │
-           │  跨链已结束（可选，不走 Router）
-           ▼
-┌─────────────────────┐
-│ Curve 官方 3pool     │
-│ ① approve 3pool     │
-│ ② exchange          │
-└──────────┬──────────┘
-           ▼
-     以太坊 USDC 等（仍留在以太坊）
-```
+![波场与以太坊跨链及到账后再兑](./StablecoinBridge.svg)
 
 | 路径 | 用户 approve 对象 | 第二笔签名 | swap | 资金终点 |
 |---|---|---|---|---|

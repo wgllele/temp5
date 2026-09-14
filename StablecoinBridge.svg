@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" width="980" height="560" role="img" aria-label="‚:Â*JË˛ 0&çQ">
+  <style>
+    .box { fill: #f6f8fa; stroke: #d0d7de; }
+    .t { font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #1f2328; }
+    .t6 { font: 600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #1f2328; }
+    .s { font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #656d76; }
+    .cap { font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #656d76; }
+    .arr { stroke: #0969da; stroke-width: 2; fill: none; }
+    .arrh { stroke: #0969da; stroke-width: 2; fill: #0969da; }
+  </style>
+  <text class="cap" x="24" y="24">‚:</text>
+  <text class="cap" x="400" y="24">LayerZero / USDT0 Mesh</text>
+  <text class="cap" x="720" y="24">Â*J</text>
+
+  <rect class="box" x="24" y="40" width="250" height="66"/>
+  <text class="t6" x="38" y="68">(7±</text>
+  <text class="s" x="38" y="90">TRC20 USDT</text>
+
+  <line class="arr" x1="149" y1="106" x2="149" y2="136"/>
+  <polygon class="arrh" points="144,128 149,136 154,128"/>
+  <text class="s" x="158" y="126">` approve  a execute</text>
+
+  <rect class="box" x="24" y="136" width="250" height="70"/>
+  <text class="t6" x="38" y="164">ÏÑË˛¶</text>
+  <text class="s" x="38" y="186">BridgeTron ∑ ÍËQ ∑ c 2 bps</text>
+
+  <line class="arr" x1="149" y1="206" x2="149" y2="236"/>
+  <polygon class="arrh" points="144,228 149,236 154,228"/>
+
+  <rect class="box" x="24" y="236" width="250" height="66"/>
+  <text class="t6" x="38" y="264">UsdtOFT</text>
+  <text class="s" x="38" y="286">send / 0&</text>
+
+  <rect class="box" x="706" y="40" width="250" height="66"/>
+  <text class="t6" x="720" y="68">(7±</text>
+  <text class="s" x="720" y="90">USDT ∑ +‚:0&</text>
+
+  <line class="arr" x1="831" y1="106" x2="831" y2="136"/>
+  <polygon class="arrh" points="826,128 831,136 836,128"/>
+  <text class="s" x="690" y="126">` approve  a execute</text>
+
+  <rect class="box" x="706" y="136" width="250" height="78"/>
+  <text class="t6" x="720" y="164">ÏÑË˛¶</text>
+  <text class="s" x="720" y="186">Router ∑ 1 ¶ÖQçË</text>
+  <text class="s" x="720" y="204">2 USDT ÙË</text>
+
+  <text class="s" x="831" y="232" text-anchor="middle">‚:6> USDT</text>
+
+  <line class="arr" x1="274" y1="171" x2="706" y2="171"/>
+  <text class="cap" x="360" y="162">‚: USDT î Â*J USDT</text>
+
+  <polyline class="arr" points="706,73 640,73 640,395 706,395"/>
+  <text class="cap" x="360" y="330">Ë˛Ú”_Ô	p Router	</text>
+
+  <rect class="box" x="706" y="360" width="250" height="70"/>
+  <text class="t6" x="720" y="388">Curve òπ 3pool</text>
+  <text class="s" x="720" y="410">` approve  a exchange</text>
+
+  <line class="arr" x1="831" y1="430" x2="831" y2="456"/>
+  <polygon class="arrh" points="826,448 831,456 836,448"/>
+
+  <rect class="box" x="706" y="456" width="250" height="66"/>
+  <text class="t6" x="720" y="484">Â*J USDC I</text>
+  <text class="s" x="720" y="506">ÕY(Â*J ∑ p Router</text>
+</svg>
