@@ -1,8 +1,10 @@
 # StablecoinBridgeTron
 
-Solidity `>=0.8.11`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)。与 [StablecoinBridgeRouter](./StablecoinBridgeRouter.md)（ETH→波场，可兑可跨）同目录；本合约部署在**波场主网**，仅 **USDT 跨到以太坊**，无 swap。
+Solidity `>=0.8.11`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)。与 [StablecoinBridgeRouter](./StablecoinBridgeRouter.md)（ETH→波场，可兑可跨）同目录；本合约部署在**波场主网**。
 
-单笔：拉 TRC20 USDT → 扣协议费留在本合约 → UsdtOFT `send`。失败整笔回滚；累计手续费与滞留资产由 owner `claimFee` 提出。
+**本合约只跨、不兑：** 拉 TRC20 USDT → 扣协议费留在本合约 → UsdtOFT `send` → 以太坊 USDT。失败整笔回滚；累计手续费与滞留资产由 owner `claimFee` 提出。
+
+**跨链到账后再兑：** 不在本合约内，也不走 `StablecoinBridgeRouter`。用户对以太坊 **Curve 官方 3pool** `approve` + `exchange`（见 §4.5）。波场侧不做 swap。
 
 必须先 `quote`，把返回的 `outAmount`、`nativeFee` 写入 `execute` 的 `destAmount` / `nativeFee`，再 `execute{value: nativeFee}`。`msg.value` 必须 **等于** `nativeFee`（单位 TRX **sun**），合约 **不退** 多余 TRX。
 
@@ -13,21 +15,20 @@ Solidity `>=0.8.11`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 ## 1. 业务架构
 
 ```
-                    ┌─────────────┐
-                    │    owner    │  setOwner / setFeeRecipient / claimFee
-                    └──────┬──────┘
-                           │
-调用方 ──approve──► ┌──────▼──────────────────────────┐
-                    │      StablecoinBridgeTron       │
-                    │     拉 USDT → 划费 → OFT.send   │
-                    └───┬──────────────────┬──────────┘
-                        │                  │
-                        ▼                  ▼
-                   手续费留存           UsdtOFT.send
-                   （claimFee）         （→ 以太坊）
-                                           │
-                                           ▼
-                                      recipient（ETH 地址）
+波场                                              以太坊
+调用方 ──approve──► StablecoinBridgeTron
+                         │
+                    划 2 bps 留存
+                         │
+                    UsdtOFT.send ═══════════════► recipient 钱包（ETH USDT）
+                                                      │
+                                                      │ 可选，跨链已结束
+                                                      ▼
+                                                 Curve 官方 3pool
+                                                 approve + exchange
+                                                      │
+                                                      ▼
+                                                 USDC / DAI 等（仍在 ETH）
 ```
 
 | 角色 | 职责 |
@@ -36,13 +37,17 @@ Solidity `>=0.8.11`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 | owner | 改管理员、写 `feeRecipient`、`claimFee` |
 | `feeRecipient` | 仅 `claimFee` 收款地址；交易过程不向外转手续费 |
 | `USDT_OFT` | 波场 UsdtOFT（LayerZero V2 / USDT0 Legacy Mesh） |
+| Curve 3pool（ETH） | **跨链后**可选兑换；用户直接调官方池，不经过本合约 / Router |
 
 ```
-StablecoinBridgeTron
+StablecoinBridgeTron（本合约）
 ├── 报价：quote（OFT 到账 + nativeFee）
 ├── 执行：execute（payable + nonReentrant）
 ├── 治理：owner / setOwner / setFeeRecipient / claimFee
 └── 代币：汇编 transfer / transferFrom / approve / balanceOf；receive/fallback payable
+
+跨链后 swap（非本合约）
+└── Curve 3pool：get_dy → approve(3pool) → exchange
 ```
 
 USDT、ETH_USDT、USDT_OFT 为 **public constant**。可变状态：`_owner`、`_feeRecipient`、重入锁 `_status`。构造仅 `initOwner`。
@@ -51,20 +56,25 @@ USDT、ETH_USDT、USDT_OFT 为 **public constant**。可变状态：`_owner`、`
 
 ## 2. 业务能力
 
-仅一条路径：**波场 USDT → 以太坊 USDT**。无 Curve、无 `swapType` / `methodType`。
+| 阶段 | 谁执行 | 说明 |
+|---|---|---|
+| 跨链 | 本合约 | 波场 USDT → 以太坊 USDT；无 Curve、无 `swapType` / `methodType` |
+| 跨链后 swap | 用户直接调 Curve 官方池 | USDT→USDC/DAI 等；**不要** `approve` 本合约或 Router |
 
-协议费固定 **2 bps**：`fee = amountIn * PROTOCOL_FEE_BPS / 10000`（`PROTOCOL_FEE_BPS=2`）。在 `send` **之前**从 USDT 全额划出，留在本合约，不转给 `feeRecipient`。
+协议费固定 **2 bps**：`fee = amountIn * PROTOCOL_FEE_BPS / 10000`（`PROTOCOL_FEE_BPS=2`）。在 `send` **之前**从 USDT 全额划出，留在本合约，不转给 `feeRecipient`。池侧另有 Curve 费（约 1.5 bps），与协议费分开。
 
 | 场景 | 说明 |
 |---|---|
-| 跨链 | 先 `quote`，再带 TRX 调 `execute`；到账为以太坊侧预计收到量（含 Mesh 扣费） |
+| 只跨 | 先 `quote`，再带 TRX 调 `execute`；终点为以太坊 `recipient` 的 USDT |
+| 跨后再兑 | 等 Mesh 到账后，对 3pool `approve` + `exchange`（§4.5） |
 
 与 ETH Router 对照：
 
 | | StablecoinBridgeRouter | StablecoinBridgeTron |
 |---|---|---|
 | 部署链 | 以太坊 | 波场 |
-| 方向 | ETH → 波场（可兑） | 波场 → ETH（只跨） |
+| 方向 | ETH → 波场（合约内可兑再跨） | 波场 → ETH（只跨） |
+| swap | `methodType=0/1` 在合约内调 Curve | **本合约无 swap**；到账后再兑走官方 3pool |
 | `msg.value` | ETH wei | TRX sun |
 | `recipient` | 波场 20 字节体（合约加 `0x41`） | 以太坊 20 字节（左垫 12 字节 0） |
 | `destChainId` | `30420` / `728126428` | `30101` / `1` |
@@ -146,6 +156,36 @@ execute{value: nativeFee}(...)
 
 `receive` / `fallback` 均为 `payable`。
 
+### 4.5 跨链到账后再 swap（不走本合约 / Router）
+
+跨链已结束：以太坊 `recipient` 已持有 USDT。若还要换成 USDC、DAI 等，用户在**以太坊**直接调 **Curve 官方 3pool**，**不要** `approve` `StablecoinBridgeTron`，也 **不要** `approve` `StablecoinBridgeRouter`（Router 是 ETH→波场用的）。
+
+```
+get_dy（只读）
+    │
+tokenIn.approve(3pool, dx)
+    │
+3pool.exchange(i, j, dx, min_dy)
+```
+
+| 顺序 | 动作 | 签名 |
+|---|---|---|
+| 0 | 等 LayerZero / Mesh 到账；确认钱包 ETH USDT 余额 | 否 |
+| 1 | `eth_call get_dy(i, j, dx)`，`min_dy` 按报价留滑点 | 否 |
+| 2 | `tokenIn.approve(3pool, dx)`；USDT 若已有非 0 授权先 `approve(0)` | 是 |
+| 3 | `3pool.exchange(i, j, dx, min_dy)` selector `0x3df02124` | 是 |
+
+| 项 | 值 |
+|---|---|
+| 池 | `0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7` |
+| 索引 | `0=DAI`，`1=USDC`，`2=USDT` |
+| USDT → USDC | `exchange(2, 1, dx, min_dy)`，先 `USDT.approve(3pool, dx)` |
+| USDC → USDT | `exchange(1, 2, dx, min_dy)`，先 `USDC.approve(3pool, dx)` |
+| 池费 | 约 1.5 bps，与本合约 2 bps 协议费分开 |
+| `min_dy` | 用对应方向 `get_dy` 再扣滑点，不要写死 |
+
+资金终点仍在以太坊。产品上这是跨链之后的**另两笔**以太坊签名（approve + exchange），与波场侧 `approve` + `execute` 分开。
+
 ---
 
 ## 5. 常量
@@ -159,6 +199,8 @@ execute{value: nativeFee}(...)
 | `USDT` | `0xa614f803B6FD780986A42c78Ec9c7f77e6DeD13C`（`TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`） |
 | `ETH_USDT` | `0xdAC17F958D2ee523a2206206994597C13D831ec7` |
 | `USDT_OFT` | 波场 UsdtOFT；源码暂与 ETH OFT 同 20 字节，上线前核对 |
+| Curve 3pool（跨链后 swap） | `0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7` |
+| ETH USDC | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
 
 ---
 
@@ -202,13 +244,14 @@ ERC20：`approve` 先置 0；只检查 call 成功。
 ## 8. 边界与对接注意
 
 - 协议费与 `send` 同笔；失败一并回滚。
-- `send` 之后不跟踪；到账按 UsdtOFT / LayerZero / Mesh。
+- `send` 之后不跟踪；到账按 UsdtOFT / LayerZero / Mesh，有延迟；到账后再兑须等余额可见。
 - `recipient` 填**以太坊**地址，不要填波场 `T…`。
 - `nativeFee` / `msg.value` 是 **sun**（1 TRX = 1e6 sun），不是 wei。
 - 询价到上链之间 Mesh/费会变；过期重新 `quote`。
 - `claimFee` 的 `amount==1` 表示全部，无法精确提取 1 个最小单位。
 - 本合约无 deadline / nonce，重放由调用方自行保证。
 - 不要 `approve` OFT；不要多付 TRX 指望退款。
+- 跨链后 swap：**只** `approve` Curve 官方 3pool，不要 `approve` 本合约或 Router；`min_dy` 用当次 `get_dy`。
 
 ### 联调检查单
 
@@ -217,3 +260,5 @@ ERC20：`approve` 先置 0；只检查 call 成功。
 - [ ] USDT 先 `approve(0)` 再授权本合约（若原授权非 0）
 - [ ] `destAmount` / `nativeFee` / `call_value` 与当次 `quote` 一致
 - [ ] 展示 2 bps 协议费 + `outAmount`
+- [ ] 若跨后再兑：等 Mesh 到账 → `get_dy` → `approve(3pool)` → `exchange`；未误调 Router
+- [ ] 展示 Curve 池费 / 滑点与协议费分开
