@@ -8,7 +8,7 @@ Solidity `>=0.8.11`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 
 必须先 `quote`，把返回的 `outAmount`、`nativeFee` 写入 `execute` 的 `destAmount` / `nativeFee`，再 `execute{value: nativeFee}`。`msg.value` 必须 **等于** `nativeFee`（单位 TRX **sun**），合约 **不退** 多余 TRX。
 
-尚未部署主网地址时以源码常量为准。`USDT_OFT` 部署前用 ETH UsdtOFT `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0.peers(30420)` 核对 20 字节。
+**波场主网：** `TTF3jaLnaMLhZwQ32J89jXuSkFwrtSKG8t`（[tronscan](https://tronscan.org/contract/TTF3jaLnaMLhZwQ32J89jXuSkFwrtSKG8t/code)）。`USDT_OFT` 部署前用 ETH UsdtOFT `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0.peers(30420)` 核对 20 字节。
 
 ---
 

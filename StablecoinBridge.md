@@ -196,7 +196,7 @@ execute{value: nativeFee}  methodType=2
 
 | 名 | 链 | 地址 / 值 |
 |---|---|---|
-| `StablecoinBridgeTron` | 波场 | 见源码；部署后填主网地址 |
+| `StablecoinBridgeTron` | 波场 | `TTF3jaLnaMLhZwQ32J89jXuSkFwrtSKG8t`（[tronscan](https://tronscan.org/contract/TTF3jaLnaMLhZwQ32J89jXuSkFwrtSKG8t/code)） |
 | `StablecoinBridgeRouter` | 以太坊 | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070` |
 | Curve 3pool | 以太坊 | `0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7` |
 | UsdtOFT | 以太坊 / 波场 peer | `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0` |
