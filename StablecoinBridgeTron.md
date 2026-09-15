@@ -8,8 +8,8 @@ Solidity `>=0.8.11`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 
 必须先 `quote`，把返回的 `outAmount`、`nativeFee` 写入 `execute` 的 `destAmount` / `nativeFee`，再 `execute{value: nativeFee}`。`msg.value` 必须 **等于** `nativeFee`（单位 TRX **sun**），合约 **不退** 多余 TRX。
 
-**波场主网（错误 OFT，勿再用）：** `TTF3jaLnaMLhZwQ32J89jXuSkFwrtSKG8t`。须用正确 `USDT_OFT` 重新部署后再更新本地址。  
-**USDT_OFT（波场）：** `0x3a08f76772e200653bb55c2a92998daca62e0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`），来自 ETH `0x1F748c76…dfb0.peers(30420)`。
+**波场主网：** `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（[tronscan](https://tronscan.org/contract/TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R/code)）。  
+**USDT_OFT（波场）：** `0x3a08F76772e200653bB55c2a92998DAcA62e0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`），来自 ETH `0x1F748c76…dfb0.peers(30420)`。旧址 `TTF3jaLnaMLhZwQ32J89jXuSkFwrtSKG8t`（错误 OFT）已废弃。
 
 ---
 
@@ -199,7 +199,7 @@ tokenIn.approve(3pool, dx)
 | `ETH_CHAIN_ID` | `1` |
 | `USDT` | `0xa614f803B6FD780986A42c78Ec9c7f77e6DeD13C`（`TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`） |
 | `ETH_USDT` | `0xdAC17F958D2ee523a2206206994597C13D831ec7` |
-| `USDT_OFT` | `0x3a08f76772e200653bb55c2a92998daca62e0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`） |
+| `USDT_OFT` | `0x3a08F76772e200653bB55c2a92998DAcA62e0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`） |
 | Curve 3pool（跨链后 swap） | `0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7` |
 | ETH USDC | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
 

@@ -196,11 +196,11 @@ execute{value: nativeFee}  methodType=2
 
 | 名 | 链 | 地址 / 值 |
 |---|---|---|
-| `StablecoinBridgeTron` | 波场 | 旧址 `TTF3jaLnaMLhZwQ32J89jXuSkFwrtSKG8t`（错误 OFT，废弃）；源码已改 `USDT_OFT`，**重新部署后填新地址** |
+| `StablecoinBridgeTron` | 波场 | `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（[tronscan](https://tronscan.org/contract/TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R/code)）；旧址 `TTF3ja…` 废弃 |
 | `StablecoinBridgeRouter` | 以太坊 | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070` |
 | Curve 3pool | 以太坊 | `0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7` |
 | UsdtOFT | 以太坊 | `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0` |
-| UsdtOFT | 波场 peer | `0x3a08f76772e200653bb55c2a92998daca62e0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`） |
+| UsdtOFT | 波场 peer | `0x3a08F76772e200653bB55c2a92998DAcA62e0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`） |
 | 波场 USDT | 波场 | `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t` |
 | 以太坊 USDT | 以太坊 | `0xdAC17F958D2ee523a2206206994597C13D831ec7` |
 | 以太坊 USDC | 以太坊 | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |

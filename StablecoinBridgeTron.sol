@@ -34,7 +34,7 @@ contract StablecoinBridgeTron {
     /// @dev 以太坊 USDT，仅用于 `destToken` 校验。
     address public constant ETH_USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     /// @dev 波场 UsdtOFT（USDT0 Legacy Mesh）。ETH `0x1F748c…dfb0.peers(30420)` → `0x3a08f767…0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`）。
-    address public constant USDT_OFT = 0x3a08f76772e200653bb55c2a92998daca62e0e97;
+    address public constant USDT_OFT = 0x3a08F76772e200653bB55c2a92998DAcA62e0e97;
 
     error OwnableUnauthorizedAccount(address account);
     error OwnableInvalidOwner(address owner);
