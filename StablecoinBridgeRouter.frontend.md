@@ -2,11 +2,13 @@
 
 面向钱包 / DApp / 后台发交易。主网参数与业务流程见 [StablecoinBridgeRouter.md](./StablecoinBridgeRouter.md)；双向总览见 [StablecoinBridge.md](./StablecoinBridge.md)。
 
-**主网 Router：** `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（Ethereum `chainId = 1`）  
+**主网 Router：** `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（Ethereum `chainId = 1`）——对接前确认链上 ABI 已是 `minAmountLD`（非旧 `destAmount`/`OFT_MIN_BPS`）；否则用本仓库源码重发后改配置。  
 **旧地址 `0x0794…` ABI 已废弃**，不要再用 `feeMode` / `swapFee` / 结构体 `SwapParam`。  
-**波场 → ETH：** [StablecoinBridgeTron](./StablecoinBridgeTron.md) 主网 `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（不在本文对接范围）。
+**波场 → ETH：** [StablecoinBridgeTron](./StablecoinBridgeTron.md)——旧 `TG1tdbbj…` 勿用，须最新源码重发。
 
 前端只需调：**ERC20 `approve` + `quote`（eth_call）+ `execute`（发交易）**。不要调 UsdtOFT、不要调 Curve。
+
+跨链：`minAmountLD = outAmount * (10000 - oftToleranceBps) / 10000`（建议默认 15～20）；Curve：`minAmountOut` 用 `curveSlippageBps`。**UI「滑点」只展示后者。**
 
 ---
 
@@ -30,7 +32,8 @@ export const CHAIN_ID = 1;
 
 export const PROTOCOL_FEE_BPS = 2n;
 export const BPS = 10_000n;
-export const OFT_MIN_BPS = 9_900n; // 跨链 destAmount 不得低于成交时 quoteOFT 的 99%
+// 跨链 minAmountLD = quote.outAmount * (BPS - oftToleranceBps) / BPS
+// 注意：oftToleranceBps 是报价漂移保底，不算进 UI「总滑点」；Curve 用单独的 curveSlippageBps → minAmountOut
 
 export const LZ_EID_TRON = 30420n;
 export const TRON_CHAIN_ID = 728126428n; // destChainId 填二者之一即可
@@ -64,9 +67,8 @@ export const TOKENS = {
 ```ts
 export const ROUTER_ABI = [
   "function quote(uint256 swapType, uint256 methodType, address tokenIn, address tokenOut, address recipient, uint256 amountIn, uint256 destChainId, address destToken) view returns (uint256 outAmount, uint256 nativeFee)",
-  "function execute(uint256 swapType, uint256 methodType, address tokenIn, address tokenOut, address recipient, uint256 amountIn, uint256 minAmountOut, uint256 destChainId, address destToken, uint256 destAmount, uint256 nativeFee) payable returns (uint256 outAmount)",
+  "function execute(uint256 swapType, uint256 methodType, address tokenIn, address tokenOut, address recipient, uint256 amountIn, uint256 minAmountOut, uint256 destChainId, address destToken, uint256 minAmountLD, uint256 nativeFee) payable returns (uint256 outAmount)",
   "function PROTOCOL_FEE_BPS() view returns (uint256)",
-  "function OFT_MIN_BPS() view returns (uint256)",
   "function USDT() view returns (address)",
   "event FeeCharged(address indexed token, address indexed holder, uint256 fee)",
   "event Swap(address indexed sender, address indexed recipient, address indexed pool, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)",
@@ -143,7 +145,7 @@ export function tronBase58ToRecipient(tAddr: string): Address {
    建议 slippageBps：小额 10～30；波动大或金额大 50～100
 4. 若 allowance < amountIn：USDT 先 approve(Router, 0) 再 approve(Router, amountIn)
    其它币可直接 approve(Router, amountIn)
-5. execute({ …, minAmountOut, destChainId: 0 或任意, destToken: 0, destAmount: 0, nativeFee: 0, value: 0 })
+5. execute({ …, minAmountOut, destChainId: 0 或任意, destToken: 0, minAmountLD: 0, nativeFee: 0, value: 0 })
 ```
 
 `quote` 的 `nativeFee` 为 `0`。`execute` 的 **`msg.value` 必须为 0**，多带 1 wei 也会 `NativeFeeMismatch`。
@@ -158,17 +160,18 @@ export function tronBase58ToRecipient(tAddr: string): Address {
 3. destToken = 0x0 或 USDT（非 0 必须是 USDT）
 4. methodType=1：tokenOut 必须是 USDT；先 quote 比池
    methodType=2：tokenIn 必须是 USDT；tokenOut 建议填 USDT
-5. quote → destAmount = outAmount，nativeFee 原样保存
-6. minAmountOut：methodType=1 按兑出 USDT 留滑点（可用 outAmount 的 99% 仅作 Curve；
-   跨链真正卡的是 destAmount ≥ 成交时 OFT 到账的 99%）
+5. quote → nativeFee 原样；minAmountLD = outAmount * (10000 - oftToleranceBps) / 10000
+   （报价漂移保底，建议默认 15～20；**不算进 UI 总滑点**）
+6. minAmountOut：methodType=1 才需要，用 **Curve 滑点** `curveSlippageBps`（`Slippage`），与 OFT 分开；
    methodType=2：minAmountOut 填 0 即可
 7. approve(Router, amountIn)（USDT 先置 0）
 8. 钱包 value = nativeFee（Wei，必须相等，不退零）
-9. execute(… destAmount, nativeFee) { value: nativeFee }
+9. execute(… minAmountLD, nativeFee) { value: nativeFee }
 ```
 
-**`destAmount` / `nativeFee` 必须用当次 `quote` 的返回值，不要手改。**  
-询价到签名之间池/跨链费会变：`minAmountOut` 防 Curve；`destAmount` 相对成交时 `quoteOFT` 允许差到 1%（`OFT_MIN_BPS`）。过期请重新 `quote` 再发。
+**`nativeFee` 必须用当次 `quote`；`minAmountLD` 由调用方按报价链下打折后传入（成交时 `quoteOFT ≥ minAmountLD`，不足 → `OftSlippage`）。**  
+**Curve `minAmountOut` 与 OFT `minAmountLD` 分开算、分开展示，不要合成一个「总滑点」。**  
+询价到签名之间池/跨链费会变：过期请重新 `quote` 再发。
 
 用户钱包需要：
 
@@ -266,7 +269,8 @@ async function bridgeToTron(params: {
   tokenIn: Address;
   amountIn: bigint;
   tronT: string;
-  slippageBps: bigint; // 仅 methodType=1 的 Curve
+  curveSlippageBps: bigint; // 仅 methodType=1 → minAmountOut；计入 UI「滑点」
+  oftToleranceBps: bigint; // → minAmountLD；报价漂移保底，不算总滑点
 }) {
   const recipient = tronBase58ToRecipient(params.tronT);
   const tokenOut = TOKENS.USDT.address;
@@ -281,7 +285,10 @@ async function bridgeToTron(params: {
     swapTypes,
   });
   const minAmountOut =
-    params.methodType === 2n ? 0n : (q.outAmount * (10_000n - params.slippageBps)) / 10_000n;
+    params.methodType === 2n
+      ? 0n
+      : (q.outAmount * (10_000n - params.curveSlippageBps)) / 10_000n;
+  const minAmountLD = (q.outAmount * (10_000n - params.oftToleranceBps)) / 10_000n;
 
   await ensureApprove(params.tokenIn, params.amountIn);
 
@@ -299,7 +306,7 @@ async function bridgeToTron(params: {
       minAmountOut,
       TRON_CHAIN_ID,
       zeroAddress,
-      q.outAmount, // destAmount
+      minAmountLD,
       q.nativeFee,
     ],
     value: q.nativeFee, // 必须相等
@@ -347,7 +354,7 @@ async function ensureApprove(token: Address, amountIn: bigint) {
 | 协议费 | `amountIn * 2 / 10000`（`tokenIn` 最小单位） |
 | 预计到账 | `quote.outAmount`（只兑 = `tokenOut`；跨链 = 波场预计到账，已含 Mesh） |
 | 跨链网络费 | `formatEther(nativeFee)` ETH，需随交易垫付 |
-| `minAmountOut` 文案 | 「最少兑出（Curve 滑点）」；跨链另有 1% OFT 下限，不必再让用户填 `destAmount` |
+| UI「滑点」 | **仅** Curve：`minAmountOut`（`curveSlippageBps`）。OFT 的 `minAmountLD` / `oftToleranceBps` 是报价保底，**不要算进总滑点** |
 
 成交后：
 
@@ -363,12 +370,13 @@ async function ensureApprove(token: Address, amountIn: bigint) {
 | 错误 | 何时 | 建议提示 |
 |---|---|---|
 | `NativeFeeMismatch(required, given)` | `msg.value` ≠ 只兑 0 / 跨链 `nativeFee` | 跨链请用最新报价的 ETH 网络费，不要改 value |
-| `Slippage(amountOut, min)` | Curve 兑出或 OFT `destAmount` 过低 | 提高滑点或重新询价 |
+| `Slippage(amountOut, min)` | Curve 兑出低于 `minAmountOut` | 提高 Curve 滑点或重新询价 |
+| `OftSlippage(amountOut, min)` | 跨链 `quoteOFT` 低于 `minAmountLD` | 提高跨链滑点（降低 `minAmountLD`）或重新询价 |
 | `UnknownDestChain` | `destChainId` 不是 30420 / 728126428 | 仅支持波场 |
 | `ZeroAddress` | 跨链 `recipient` 为空 | 填写有效 T 地址 |
 | `BridgeTokenMustBeUsdt` | 直跨非 USDT，或兑后跨 `tokenOut` 非 USDT，或 `destToken` 乱填 | 跨链资产仅为 USDT |
 | `UnknownToken` / `UnknownPool` / `SameToken` | 币或池不匹配 | 检查交易对与 swapType |
-| `ZeroAmount` | `amountIn` 或跨链 `destAmount` 为 0 | 金额无效 |
+| `ZeroAmount` | `amountIn` 或跨链 `minAmountLD` 为 0 | 金额无效 |
 | `InvalidMethodType` | 不是 0/1/2 | — |
 | `ExchangeFailed` | Curve `get_dy`/`exchange` 失败 | 池子或金额异常，换池重试 |
 | ERC20 / USDT 失败 | 未授权、余额不足、黑名单 | 检查余额与 approve |
@@ -396,6 +404,6 @@ async function ensureApprove(token: Address, amountIn: bigint) {
 - [ ] USDT 二次 approve（非 0 → 先 0）
 - [ ] USDC↔USDT 两次 `quote` 再选池
 - [ ] 只兑 `value = 0`
-- [ ] 跨链 T 地址去掉 `41`；`destAmount`/`nativeFee`/`value` 三相等（后两者与 quote 一致）
+- [ ] 跨链 T 地址去掉 `41`；`minAmountLD` 按报价打折；`nativeFee`/`value` 与 quote 一致
 - [ ] 展示 2 bps 协议费 + `outAmount`
 - [ ] 重新询价后再签名（报价超过数秒到几十秒建议刷新）

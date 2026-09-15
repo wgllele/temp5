@@ -3,7 +3,7 @@ pragma solidity >=0.8.28;
 
 /// @title 稳定币兑换与跨链路由
 /// @notice 同链 Curve 兑换；methodType 1/2 经主网 UsdtOFT（LayerZero V2 OFT）`send` 跨出 **USDT**。
-/// @dev 主网 Router：`0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`。
+/// @dev 主网旧 Router：`0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（若仍含 `OFT_MIN_BPS`/`destAmount` 须重发）。
 ///      跨链须先 `quote` 再 `execute{value: nativeFee}`。目的链仅波场：EID `30420` 或 chainId `728126428`。
 ///      `ACROSS_PROTOCOL` 名为历史遗留，实为 ETH UsdtOFT `0x1F748c76…`。反向见 `StablecoinBridgeTron`。
 ///      文档：`StablecoinBridgeRouter.md` / `StablecoinBridge.md`。
@@ -45,8 +45,6 @@ contract StablecoinBridgeRouter {
     /// @dev 协议费固定 2 bps：`amountIn * PROTOCOL_FEE_BPS / BPS_DENOMINATOR`。
     uint256 public constant PROTOCOL_FEE_BPS = 2;
     uint256 private constant BPS_DENOMINATOR = 10_000;
-    /// @dev 跨链 `destAmount` 不得低于成交时 `quoteOFT.amountReceivedLD` 的 99%。
-    uint256 public constant OFT_MIN_BPS = 9_900;
     uint32 public constant LZ_EID_TRON = 30420;
     uint256 public constant TRON_CHAIN_ID = 728126428;
 
@@ -84,7 +82,10 @@ contract StablecoinBridgeRouter {
     error InvalidMethodType(uint256 methodType);
     error SameToken();
     error ZeroAmount();
+    /// @dev Curve 兑换滑点：`amountOut < minAmountOut`
     error Slippage(uint256 amountOut, uint256 minAmountOut);
+    /// @dev 跨链 OFT 滑点：成交时 `quoteOFT < minAmountLD`（与 Curve `Slippage` 区分）
+    error OftSlippage(uint256 amountOut, uint256 minAmountOut);
     error ZeroAddress();
     error ExchangeFailed();
     error FeeExceedsAmount(uint256 fee, uint256 amount);
@@ -190,7 +191,7 @@ contract StablecoinBridgeRouter {
         return bytes32((uint256(0x41) << 160) | uint256(uint160(recipient)));
     }
 
-    /// @notice 询价。只兑：`outAmount` 为扣费后 `get_dy`，`nativeFee=0`。跨链：`outAmount` 写入 `execute` 的 `destAmount`，`nativeFee` 作 `msg.value`。
+    /// @notice 询价。只兑：`outAmount` 为扣费后 `get_dy`，`nativeFee=0`。跨链：调用方用 `outAmount` 链下打折得 `minAmountLD`，`nativeFee` 作 `msg.value`。
     function quote(
         uint256 swapType,
         uint256 methodType,
@@ -218,6 +219,7 @@ contract StablecoinBridgeRouter {
 
     /// @notice 拉 tokenIn → 划费 →（可选）Curve → methodType 0 转给 recipient，methodType 1/2 对 UsdtOFT `send`。
     /// @dev 跨链先 `quote`，`msg.value` 必须等于 `nativeFee`，不退多余 ETH。
+    /// @param minAmountLD 跨链到账下限（对齐 OFT `SendParam.minAmountLD`）。调用方按 `quote.outAmount` 链下打折；只兑填 0。
     function execute(
         uint256 swapType,
         uint256 methodType,
@@ -228,7 +230,7 @@ contract StablecoinBridgeRouter {
         uint256 minAmountOut,
         uint256 destChainId,
         address destToken,
-        uint256 destAmount,
+        uint256 minAmountLD,
         uint256 nativeFee
     ) external payable nonReentrant returns (uint256 outAmount) {
         if (amountIn == 0) revert ZeroAmount();
@@ -245,7 +247,7 @@ contract StablecoinBridgeRouter {
             amountIn -= fee;
         }
         if (methodType == METHOD_BRIDGE) {
-            return _oftSend(recipient, destChainId, destAmount, nativeFee, amountIn);
+            return _oftSend(recipient, destChainId, minAmountLD, nativeFee, amountIn);
         }
         {
             outAmount = _curveSwap(swapType, tokenIn, tokenOut, amountIn, minAmountOut);
@@ -255,7 +257,7 @@ contract StablecoinBridgeRouter {
             _safeTransfer(tokenOut, recipient, outAmount);
             return outAmount;
         }
-        return _oftSend(recipient, destChainId, destAmount, nativeFee, outAmount);
+        return _oftSend(recipient, destChainId, minAmountLD, nativeFee, outAmount);
     }
 
     /// @dev Curve `get_dy` ABI 为 `(int128,int128,uint256)`；下标 0/1/2 用 uint256 mstore 即可。
@@ -335,29 +337,26 @@ contract StablecoinBridgeRouter {
         _safeApprove(tokenIn, pool, 0);
     }
 
-    /// @dev 第二步：用调用方传入的 destAmount / nativeFee 调 UsdtOFT.send，不再链上 quoteSend。
+    /// @dev 第二步：用调用方传入的 minAmountLD / nativeFee 调 UsdtOFT.send。
+    ///      成交时 `quoteOFT < minAmountLD` → `OftSlippage`（与 Curve `Slippage` 区分）。
     function _oftSend(
         address recipient,
         uint256 destChainId,
-        uint256 destAmount,
+        uint256 minAmountLD,
         uint256 nativeFee,
         uint256 usdtAmt
     ) internal returns (uint256 received) {
         if (usdtAmt == 0) revert ZeroAmount();
-        if (destAmount == 0) revert ZeroAmount();
+        if (minAmountLD == 0) revert ZeroAmount();
 
         {
             uint32 dstEid = dstEidOf(destChainId);
             bytes32 to = oftTo(destChainId, recipient);
-            uint256 minLd = destAmount;
-            if (minLd > usdtAmt) {
-                minLd = usdtAmt;
-            }
+            // OFT minAmountLD 不可超过 amountLD
+            uint256 minLd = minAmountLD > usdtAmt ? usdtAmt : minAmountLD;
             {
                 uint256 quoted = _oftQuoteReceived(dstEid, to, usdtAmt, minLd);
-                uint256 minOk = (quoted * OFT_MIN_BPS) / BPS_DENOMINATOR;
-                if (minOk == 0) revert ZeroAmount();
-                if (destAmount < minOk) revert Slippage(destAmount, minOk);
+                if (quoted < minAmountLD) revert OftSlippage(quoted, minAmountLD);
             }
             _safeApprove(USDT, ACROSS_PROTOCOL, usdtAmt);
             {

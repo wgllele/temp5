@@ -16,7 +16,7 @@
 | 底层 USDT | 以太坊 | `0xdAC17F958D2ee523a2206206994597C13D831ec7` |
 | 底层 USDT | 波场 | `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`（`0xa614f803…`） |
 | 我们的 Router | 以太坊 | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（常量名 `ACROSS_PROTOCOL` 指向本 UsdtOFT） |
-| 我们的 BridgeTron | 波场 | `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R` |
+| 我们的 BridgeTron | 波场 | 最新源码待重发（旧 `TG1tdbbj…` 含错误 `OFT_MIN_BPS`，勿对接） |
 
 双向 peer：
 
@@ -129,7 +129,7 @@ return OFTReceipt(amountSent, amountReceived)
 | `dstEid` | 目的 LZ EID | ETH→波场：`30420`；波场→ETH：`30101` |
 | `to` | 目的收款 `bytes32` | 见下节 |
 | `amountLD` | 本链锁入毛额（6 位） | 入口扣 2 bps 后的净 USDT |
-| `minAmountLD` | 扣 Mesh 后到账下限 | 入口的 `destAmount`（成交前再 quote 校验） |
+| `minAmountLD` | 扣 Mesh 后到账下限 | 入口的 **`minAmountLD`**（调用方传入；成交前 `quoteOFT ≥ minAmountLD`，否则入口 `OftSlippage`） |
 | `extraOptions` | LZ options | `0x` |
 | `composeMsg` | compose | `0x`（非空会走 `SEND_OFT_AND_CALL`） |
 | `oftCmd` | 未使用 | `0x` |
@@ -171,15 +171,18 @@ amountReceived = amountSent - feeAmount;
 require(amountReceived >= minAmountLD); // 否则 SlippageExceeded
 ```
 
-与入口合约滑点的关系：
+与入口合约滑点 / 保底的关系：
 
 | 层 | 规则 |
 |---|---|
 | 入口 2 bps | 在调 OFT **之前**从用户 `amountIn` 扣 |
 | UsdtOFT `feeBps` | OFT 内再扣；`quoteOFT.amountReceivedLD` 已含 |
-| 入口 `OFT_MIN_BPS` | 成交时要求 `quoteOFT ≥ destAmount × 9900/10000` |
+| 入口 `minAmountLD` | 调用方按 `quote.outAmount` × `(10000 - oftToleranceBps)/10000` 传入；合约要求成交时 `quoteOFT ≥ minAmountLD` → 否则 **`OftSlippage`** |
+| Curve `minAmountOut` | 仅 Router；不足 → **`Slippage`**；与 OFT 分开，**不算进同一「总滑点」展示时不要把 oftTolerance 加进去** |
 
 展示「跨链预计到账」用入口 `quote.outAmount`（已含 2 bps + Mesh），不要自己 1:1 估算。
+
+> **旧版勿用：** `OFT_MIN_BPS` / `destAmount ≥ quoted×99%` 方向错误，已从最新入口源码移除。
 
 ---
 
@@ -222,5 +225,5 @@ require(amountReceived >= minAmountLD); // 否则 SlippageExceeded
 - [ ] ETH `peers(30420)` / 波场 `peers(30101)` 互指正确
 - [ ] `credits(目的 EID)` 足以覆盖本次 `amountReceivedLD`
 - [ ] 入口 `quote` 返回非空 `outAmount` + `nativeFee`
-- [ ] `destAmount` = 当次 `outAmount`；`msg.value` = 当次 `nativeFee`
-- [ ] 展示分清：入口 2 bps、Mesh `feeBps`、LZ 网络费
+- [ ] 入口已是最新：`minAmountLD`（非旧 `destAmount`/`OFT_MIN_BPS`）；`msg.value` = 当次 `nativeFee`
+- [ ] 展示分清：入口 2 bps、Mesh `feeBps`、LZ 网络费；UI 滑点只含 Curve

@@ -9,7 +9,7 @@
 - **波场 → 以太坊之后** 再兑换、且不经过我们收费：用户直接对 Curve 官方池 `approve` + `exchange`。
 - 波场侧不 swap。
 
-合约文档：[StablecoinBridgeTron](./StablecoinBridgeTron.md)（波场→ETH，只跨）· [StablecoinBridgeRouter](./StablecoinBridgeRouter.md)（ETH 只兑收费、ETH→波场）· [前端对接](./StablecoinBridgeRouter.frontend.md)
+合约文档：[StablecoinBridgeTron](./StablecoinBridgeTron.md)（波场→ETH，只跨）· [StablecoinBridgeRouter](./StablecoinBridgeRouter.md)（ETH 只兑收费、ETH→波场）· [前端对接](./StablecoinBridgeRouter.frontend.md)· [UsdtOFT 通道详解](./UsdtOFT.md)
 
 ---
 
@@ -80,7 +80,7 @@ execute{value: nativeFee}
 |---|---|---|
 | 0 | `quote(recipient, amountIn, destChainId, destToken)` → `outAmount`, `nativeFee` | 否 |
 | 1 | `USDT.approve(BridgeTron, amountIn)`；非 0 授权先置 0 | 是 |
-| 2 | `execute{value: nativeFee}`：拉币 → 扣 2 bps → `UsdtOFT.send` 到以太坊地址 | 是 |
+| 2 | `minAmountLD = outAmount * (10000 - oftToleranceBps) / 10000`（建议 15～20，**不算 UI 总滑点**）；`execute{value: nativeFee}` | 是 |
 | — | LayerZero / Mesh 到账（有延迟） | 否 |
 
 - `recipient` 填**以太坊** 20 字节地址，不要填波场 `T…`。
@@ -88,7 +88,8 @@ execute{value: nativeFee}
 - `destToken`：不参与发币；填 `0` 或 ETH USDT 即可（非 0 时必须是 USDT）。
 - `nativeFee` / `msg.value` 单位是 TRX **sun**。
 - 用户 `approve` 本合约，不是 OFT。
-- `quote` 已扣 2 bps；返回空/`REVERT` 时先核对合约是否为 `TG1tdbbj…` 且 `USDT_OFT` 为波场 peer。
+- 成交：`quoteOFT ≥ minAmountLD`，否则 `OftSlippage`。
+- **部署：** 用本仓库最新源码重发；链上旧址 `TG1tdbbj…`（`destAmount` + `OFT_MIN_BPS`）勿用。`quote` 空/`REVERT` 时先核对 `USDT_OFT` 是否为波场 peer `0x3a08F767…`。
 
 ---
 
@@ -138,7 +139,7 @@ execute  methodType=0  value=0
 |---|---|---|
 | 0 | `quote` 比池（3pool / NG），记下 `outAmount`；`nativeFee` 为 0 | 否 |
 | 1 | `tokenIn.approve(Router, amountIn)`（不是 3pool、不是 OFT） | 是 |
-| 2 | `execute methodType=0`：`msg.value=0`，`destAmount=0`，`nativeFee=0`；扣 2 bps 后兑给 `recipient` | 是 |
+| 2 | `execute methodType=0`：`msg.value=0`，`minAmountLD=0`，`nativeFee=0`；扣 2 bps 后兑给 `recipient` | 是 |
 
 - 白名单：DAI / USDC / USDT / PYUSD / crvUSD / RLUSD。
 - `minAmountOut` 按 `quote.outAmount` 留滑点。多带 1 wei 也会 `NativeFeeMismatch`。
@@ -164,7 +165,7 @@ execute{value: nativeFee}  methodType=1
 
 | 顺序 | 动作 | 签名 |
 |---|---|---|
-| 0 | `quote` 比池（3pool / NG），记下 `outAmount`、`nativeFee` | 否 |
+| 0 | `quote` 比池（3pool / NG），记下 `outAmount`、`nativeFee`；`minAmountLD` 由 `outAmount` 链下打折；`minAmountOut` 用 Curve 滑点（与 OFT 分开） | 否 |
 | 1 | `tokenIn.approve(Router, amountIn)`（不是 3pool、不是 OFT） | 是 |
 | 2 | `execute methodType=1`：扣 2 bps → 合约内 Curve → `UsdtOFT.send` | 是 |
 
@@ -186,7 +187,7 @@ execute{value: nativeFee}  methodType=2
 
 | 顺序 | 动作 | 签名 |
 |---|---|---|
-| 0 | `quote` → `destAmount`、`nativeFee` 原样回填 | 否 |
+| 0 | `quote` → `minAmountLD`（`outAmount` 链下打折）、`nativeFee` 原样回填 | 否 |
 | 1 | `USDT.approve(Router, amountIn)` | 是 |
 | 2 | `execute methodType=2`：扣 2 bps → USDT 直接 `send` | 是 |
 
@@ -198,8 +199,8 @@ execute{value: nativeFee}  methodType=2
 
 | 名 | 链 | 地址 / 值 |
 |---|---|---|
-| `StablecoinBridgeTron` | 波场 | `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（hex `0x4252aB0602F78706d9091135d6108ab99A4dC43B`）· [tronscan](https://tronscan.org/contract/TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R/code)；旧址 `TTF3ja…` 废弃 |
-| `StablecoinBridgeRouter` | 以太坊 | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070` |
+| `StablecoinBridgeTron` | 波场 | **最新源码待重发**；旧 `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（错误 `OFT_MIN_BPS`）废弃对接；更旧 `TTF3ja…` 亦废弃 |
+| `StablecoinBridgeRouter` | 以太坊 | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（确认是否已含 `minAmountLD`；否则重发） |
 | Curve 3pool | 以太坊 | `0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7` |
 | UsdtOFT | 以太坊 | `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0` |
 | UsdtOFT | 波场 peer | `0x3a08F76772e200653bB55c2a92998DAcA62e0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`） |
@@ -207,7 +208,8 @@ execute{value: nativeFee}  methodType=2
 | 以太坊 USDT | 以太坊 | `0xdAC17F958D2ee523a2206206994597C13D831ec7` |
 | 以太坊 USDC | 以太坊 | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
 | 协议费 | Router / BridgeTron | `2 bps`（只兑、兑后跨、只跨都扣） |
-| OFT 到账下限 | 两边跨链合约 | 成交时 `quoteOFT` 的 99% |
+| Curve 下限 | Router | `minAmountOut` → `Slippage`（UI「滑点」） |
+| OFT 到账下限 | 两边入口 | `minAmountLD` → `OftSlippage`（`oftToleranceBps` 链下打折；**不算 UI 总滑点**） |
 | LZ EID 以太坊 | | `30101` |
 | LZ EID 波场 | | `30420` |
 
@@ -217,7 +219,10 @@ execute{value: nativeFee}  methodType=2
 
 ## 7. 对接注意
 
-- 询价到上链之间池 / Mesh 费会变；过期重新 `quote`。`destAmount` / `nativeFee` / `msg.value` 必须用当次 `quote` 原样回填。
+- 询价到上链之间池 / Mesh 费会变；过期重新 `quote`。`minAmountLD` / `nativeFee` / `msg.value` 用当次报价（`minAmountLD` 为打折后下限）。
+- UI：「滑点」只对应 Curve `minAmountOut`；跨链 `oftToleranceBps` → `minAmountLD` 单独默认即可，不要合成总滑点。
 - `send` 之后不跟踪；到账按 UsdtOFT / LayerZero / Mesh，有延迟。
 - LayerZero 若退多余跨链费，退到 `msg.sender`，不是跨链合约。
 - 协议费留在合约内，不打给用户；展示到账用 `quote.outAmount`。
+- 部署后 `setFeeRecipient` 再 `claimFee`。
+- **两端入口均须确认链上字节码已是 `minAmountLD` + `OftSlippage` 版本后再切流量。**

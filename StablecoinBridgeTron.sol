@@ -3,10 +3,11 @@ pragma solidity >=0.8.11;
 
 /// @title 波场 USDT → 以太坊跨链入口
 /// @notice 只跨链，不 swap。拉 TRC20 USDT → 扣 2 bps → UsdtOFT.send 到以太坊。
-/// @dev 主网：`TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（hex `0x4252aB0602F78706d9091135d6108ab99A4dC43B`）。
+/// @dev 主网旧址 `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R` 为 `destAmount`+`OFT_MIN_BPS` 旧字节码，已废弃对接。
+///      须用本文件最新源码重新部署后更新文档地址。`USDT_OFT` 须为波场 peer `0x3a08F767…`。
 ///      须先 `quote`，再 `execute{value: nativeFee}`（TRX sun）。`msg.value` 必须相等，不退多余 TRX。
 ///      `quote` 已扣 2 bps 再询 OFT。跨链后再兑走以太坊 Curve 官方池，不经本合约。
-///      旧址 `TTF3ja…`（错误 OFT）已废弃。文档见 `StablecoinBridgeTron.md` / `StablecoinBridge.md`。
+///      更旧址 `TTF3ja…`（错误 OFT）已废弃。文档见 `StablecoinBridgeTron.md` / `StablecoinBridge.md`。
 contract StablecoinBridgeTron {
     event OwnerChanged(address indexed oldOwner, address indexed newOwner);
     event Bridge(
@@ -28,7 +29,6 @@ contract StablecoinBridgeTron {
 
     uint256 public constant PROTOCOL_FEE_BPS = 2;
     uint256 private constant BPS_DENOMINATOR = 10_000;
-    uint256 public constant OFT_MIN_BPS = 9_900;
     uint32 public constant LZ_EID_ETH = 30101;
     uint256 public constant ETH_CHAIN_ID = 1;
 
@@ -43,7 +43,8 @@ contract StablecoinBridgeTron {
     error OwnableUnauthorizedAccount(address account);
     error OwnableInvalidOwner(address owner);
     error ZeroAmount();
-    error Slippage(uint256 amountOut, uint256 minAmountOut);
+    /// @dev 跨链 OFT 滑点（本合约无 Curve，仅此一种滑点错误）
+    error OftSlippage(uint256 amountOut, uint256 minAmountOut);
     error ZeroAddress();
     error FeeExceedsAmount(uint256 fee, uint256 amount);
     error ClaimFailed();
@@ -140,7 +141,7 @@ contract StablecoinBridgeTron {
     /// @param amountIn 波场 USDT 毛额（含协议费）
     /// @param destChainId `30101` 或 `1`
     /// @param destToken `0` 或 ETH USDT；仅校验，不参与发币
-    /// @return outAmount 目的链预计到账 → 写入 `execute.destAmount`
+    /// @return outAmount 目的链预计到账；调用方链下打折得 `execute.minAmountLD`
     /// @return nativeFee TRX sun → 作 `execute` 的 `msg.value`
     function quote(
         address recipient,
@@ -158,13 +159,14 @@ contract StablecoinBridgeTron {
 
     /// @notice 拉 USDT → 划 2 bps → UsdtOFT.send。`msg.value` 必须等于 `nativeFee`（sun）。
     /// @param destToken 同 `quote`：`0` 或 ETH USDT，仅校验
-    /// @param destAmount / nativeFee 须用当次 `quote` 原样回填
+    /// @param minAmountLD 跨链到账下限（对齐 OFT `SendParam.minAmountLD`）；按 `quote.outAmount` 链下打折
+    /// @param nativeFee 须用当次 `quote` 原样回填
     function execute(
         address recipient,
         uint256 amountIn,
         uint256 destChainId,
         address destToken,
-        uint256 destAmount,
+        uint256 minAmountLD,
         uint256 nativeFee
     ) external payable nonReentrant returns (uint256) {
         if (amountIn == 0) revert ZeroAmount();
@@ -176,7 +178,7 @@ contract StablecoinBridgeTron {
             if (fee != 0) emit FeeCharged(USDT, address(this), fee);
             amountIn -= fee;
         }
-        return _oftSend(recipient, destChainId, destAmount, nativeFee, amountIn);
+        return _oftSend(recipient, destChainId, minAmountLD, nativeFee, amountIn);
     }
 
     function _assertParam(address recipient, uint256 destChainId, address destToken) private pure {
@@ -185,28 +187,24 @@ contract StablecoinBridgeTron {
         if (recipient == address(0)) revert ZeroAddress();
     }
 
+    /// @dev 成交时 `quoteOFT < minAmountLD` → `OftSlippage`。
     function _oftSend(
         address recipient,
         uint256 destChainId,
-        uint256 destAmount,
+        uint256 minAmountLD,
         uint256 nativeFee,
         uint256 usdtAmt
     ) internal returns (uint256 received) {
         if (usdtAmt == 0) revert ZeroAmount();
-        if (destAmount == 0) revert ZeroAmount();
+        if (minAmountLD == 0) revert ZeroAmount();
 
         {
             uint32 dstEid = dstEidOf(destChainId);
             bytes32 to = oftTo(destChainId, recipient);
-            uint256 minLd = destAmount;
-            if (minLd > usdtAmt) {
-                minLd = usdtAmt;
-            }
+            uint256 minLd = minAmountLD > usdtAmt ? usdtAmt : minAmountLD;
             {
                 uint256 quoted = _oftQuoteReceived(dstEid, to, usdtAmt, minLd);
-                uint256 minOk = (quoted * OFT_MIN_BPS) / BPS_DENOMINATOR;
-                if (minOk == 0) revert ZeroAmount();
-                if (destAmount < minOk) revert Slippage(destAmount, minOk);
+                if (quoted < minAmountLD) revert OftSlippage(quoted, minAmountLD);
             }
             _safeApprove(USDT, USDT_OFT, usdtAmt);
             {

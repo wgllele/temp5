@@ -7,11 +7,22 @@ Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 - **methodType=0 只兑不跨**：扣 2 bps，合约内调 Curve，`tokenOut` 留在以太坊；`msg.value` 必须为 0。
 - **methodType=1 兑后跨链** / **2 只跨链**：同样先扣 2 bps，再 UsdtOFT 到波场。
 
-失败则整笔回滚；累计手续费与滞留资产由 owner `claimFee` 提出。跨链必须先 `quote`，把返回的 `outAmount`、`nativeFee` 写入 `execute` 的 `destAmount` / `nativeFee`，再 `execute{value: nativeFee}`。`execute` **不再**链上 `quoteSend`；`msg.value` 必须 **等于** `nativeFee`（只兑必须为 0），合约 **不退** 多余 ETH。
+失败则整笔回滚；累计手续费与滞留资产由 owner `claimFee` 提出。跨链必须先 `quote`，把返回的 `nativeFee` 写入 `execute`，并把 `outAmount` 链下打折为 `minAmountLD`，再 `execute{value: nativeFee}`。`execute` **不再**链上 `quoteSend`；`msg.value` 必须 **等于** `nativeFee`（只兑必须为 0），合约 **不退** 多余 ETH。
 
-主网已部署 Router：`0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`。常量 `ACROSS_PROTOCOL` 实际是主网 UsdtOFT `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0`（USDT0 Legacy Mesh），不是 Across SpokePool。旧地址 `0x0794…` ABI 已废弃。
+成交时：`quoteOFT ≥ minAmountLD`，否则 `OftSlippage`；Curve：`amountOut ≥ minAmountOut`，否则 `Slippage`。二者分开，**OFT 保底不算 UI 总滑点**。
 
-波场反向入口：[StablecoinBridgeTron](./StablecoinBridgeTron.md) 主网 `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`，OFT peer `0x3a08F767…`（`TFG4wBa…`）。
+### 部署状态
+
+| | 地址 | 说明 |
+|---|---|---|
+| **源码（本仓库最新）** | 待确认是否已重发 | `execute(..., minAmountLD, nativeFee)` + `OftSlippage`；**无** `OFT_MIN_BPS` / `destAmount` |
+| **链上** | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070` | 若仍为旧字节码（`destAmount` + `OFT_MIN_BPS`），对接前须重发并换地址 |
+| UsdtOFT | `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0` | 常量名 `ACROSS_PROTOCOL`（历史遗留） |
+| 废弃 | `0x0794…` | 旧 `SwapParam` / feeMode ABI |
+
+常量 `ACROSS_PROTOCOL` 实际是主网 UsdtOFT（USDT0 Legacy Mesh），不是 Across SpokePool。
+
+波场反向入口：[StablecoinBridgeTron](./StablecoinBridgeTron.md)——`TG1tdbbj…` 为旧版，**须用最新源码重发**；OFT peer `0x3a08F767…`（`TFG4wBa…`）。
 
 ---
 
@@ -47,7 +58,7 @@ Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 
 | 角色 | 职责 |
 |---|---|
-| 调用方 `msg.sender` | 事先 `approve` Router。只兑：`execute` 且 `msg.value=0`。跨链：先 `quote` 填 `nativeFee`/`destAmount`，再 `execute{value: nativeFee}` |
+| 调用方 `msg.sender` | 事先 `approve` Router。只兑：`execute` 且 `msg.value=0`。跨链：先 `quote` 填 `nativeFee`/`minAmountLD`，再 `execute{value: nativeFee}` |
 | owner | 改管理员、写 `feeRecipient`、把本合约内累计手续费与滞留资产 `claimFee` 到 `feeRecipient` |
 | `feeRecipient` | 仅 `claimFee` 时的收款地址；交易过程不向外转手续费 |
 | Curve 3pool / NG | 同链稳定币兑换 |
@@ -101,11 +112,19 @@ StablecoinBridgeRouter
 | `tokenIn` / `tokenOut` | 拉入 / 兑出币；须在白名单 |
 | `recipient` | 只兑：`0` 视为 `msg.sender`。跨链：**必须非 0**，填去掉 `41` 的波场 20 字节体 |
 | `amountIn` | 拉入数量（含手续费） |
-| `minAmountOut` | Curve 兑出下限（methodType 0/1） |
+| `minAmountOut` | Curve 兑出下限（methodType 0/1）→ 不足 `Slippage`；**计入** UI「滑点」 |
 | `destChainId` | 仅波场：`30420`（LZ EID）或 `728126428` |
 | `destToken` | **不参与发币**。`0` 跳过；非 0 时必须是本链 USDT（断言目的链收 USDT） |
-| `destAmount` | 写入询价 `minAmountLD`；成交时须 ≥ `quoteOFT.amountReceivedLD * 9900/10000` |
+| `minAmountLD` | 跨链到账下限（对齐 OFT `SendParam.minAmountLD`）；`quote.outAmount` 链下按 `oftToleranceBps` 打折；不足 → `OftSlippage`。只兑填 0。**不算** UI 总滑点 |
 | `nativeFee` | 询价 `quoteSend(..., false)` 的 Wei；跨链时 `msg.value` 必须相等 |
+
+`execute` 签名（最新）：
+
+```text
+execute(uint256 swapType, uint256 methodType, address tokenIn, address tokenOut, address recipient,
+        uint256 amountIn, uint256 minAmountOut, uint256 destChainId, address destToken,
+        uint256 minAmountLD, uint256 nativeFee) payable returns (uint256)
+```
 
 ---
 
@@ -140,7 +159,7 @@ execute  methodType=0  value=0
 |---|---|---|
 | 0 | `quote` 比池（3pool / NG），记下 `outAmount`；`nativeFee` 为 0 | 否 |
 | 1 | `tokenIn.approve(Router, amountIn)` | 是 |
-| 2 | `execute methodType=0`：`msg.value=0`，`destAmount=0`，`nativeFee=0` | 是 |
+| 2 | `execute methodType=0`：`msg.value=0`，`minAmountLD=0`，`nativeFee=0` | 是 |
 
 - `minAmountOut` 按 `quote.outAmount` 留滑点。
 - 多带 1 wei 也会 `NativeFeeMismatch`。
@@ -151,7 +170,7 @@ execute  methodType=0  value=0
 ```
 approve(Router, amountIn)
         │
-[跨链] quote → 写入 nativeFee、destAmount
+[跨链] quote → 写入 nativeFee；minAmountLD = outAmount 链下打折
         │
 execute{value: nativeFee}(...)
         │
@@ -204,11 +223,12 @@ UsdtOFT 调用全部内联汇编（无接口 import）：`quoteOFT` `0x0d35b415`
 
 成交时（`_oftSend`）：
 
-1. 若 `destAmount >` 实际 USDT 数量，把发给 OFT 的 `minAmountLD` **夹到** `amountLD`（避免 1 wei `get_dy` 漂移触发 OFT Slippage）。
-2. 再 `quoteOFT`；要求调用方传入的 `destAmount` ≥ 该次 `amountReceivedLD * OFT_MIN_BPS / 10000`（99%）。低于则 `Slippage`。
-3. `destAmount = 0` → `ZeroAmount`。
+1. `minAmountLD == 0` → `ZeroAmount`。
+2. 发给 OFT 的参数 `minLd = min(minAmountLD, usdtAmt)`。
+3. 再 `quoteOFT`；要求 **`amountReceivedLD ≥ minAmountLD`**（校验用调用方原值）。低于则 `OftSlippage(quoted, minAmountLD)`（与 Curve `Slippage` 区分）。
+4. 旧版错误逻辑 `destAmount ≥ quoted×99%`（`OFT_MIN_BPS`）已删除，勿再实现。
 
-跨链必须填写 `recipient`。`msg.value` 必须等于 `nativeFee`（只兑必须为 0）。多付、少付都 `NativeFeeMismatch`。OFT 若退手续费，退到 `refundAddress`（`msg.sender`）。滞留在本合约的 ETH 只能由 owner `claimFee(address(0), …)` 提出。
+跨链必须填写 `recipient`。`msg.value` 必须等于 `nativeFee`（只兑必须为 0）。多付、少付都 `NativeFeeMismatch`。OFT 若退手续费，退到 `refundAddress`（`msg.sender`）。滞留在本合约的 ETH 只能由 owner `claimFee(address(0), …)` 提出。部署后先 `setFeeRecipient`。
 
 ### 4.6 治理与归集
 
@@ -272,9 +292,9 @@ RPC 形态：`eth_call`，`to` 为本 Router，`data` 为 `quote(...)` 编码。
 
 - 返回值即本笔 `outAmount`（只兑为 `tokenOut`；跨链为 OFT 预计到账）。
 - 会走拉币 / 授权 / `exchange` / `send` 的校验，因此仿真时要用 **state override**：给 `from` 足够的 `tokenIn` 余额和对 Router 的 allowance；跨链再带上 `value = nativeFee`（可先 `eth_call` `quote` 取费）。
-- 适合在 `quote` 很接近、或要核对 `minAmountOut` / `destAmount` 时复核。节点若不支持 override，只用 `quote`。
+- 适合在 `quote` 很接近、或要核对 `minAmountOut` / `minAmountLD` 时复核。节点若不支持 override，只用 `quote`。
 
-**跨链两步仍不变：** 先对选定的 `swapType` `quote`，把 `nativeFee`、`outAmount`（作 `destAmount`）写回，再 `execute{value: nativeFee}`。询价到发交易之间池会变，`minAmountOut` 按报价留滑点。
+**跨链两步仍不变：** 先对选定的 `swapType` `quote`，把 `nativeFee` 写回，把 `outAmount` 链下打折为 `minAmountLD`，再 `execute{value: nativeFee}`。询价到发交易之间池会变；Curve 用 `minAmountOut`（`Slippage`），跨链用 `minAmountLD`（`OftSlippage`）。
 
 ---
 
@@ -312,7 +332,7 @@ ERC20 / ETH 同样用汇编打包 selector。`approve` 先置 0，兼容 USDT。
 | `FeeRecipientUpdated` | 更新 `claimFee` 收款地址 |
 | `OwnerChanged` | 更换 owner |
 
-自定义错误：`OwnableUnauthorizedAccount`、`OwnableInvalidOwner`、`UnknownToken`、`UnknownPool`、`InvalidMethodType`、`SameToken`、`ZeroAmount`、`Slippage`、`ZeroAddress`、`ExchangeFailed`、`FeeExceedsAmount`、`ClaimFailed`、`ReentrancyGuardReentrantCall`、`UnknownDestChain`、`BridgeTokenMustBeUsdt`、`NativeFeeMismatch`。
+自定义错误：`OwnableUnauthorizedAccount`、`OwnableInvalidOwner`、`UnknownToken`、`UnknownPool`、`InvalidMethodType`、`SameToken`、`ZeroAmount`、`Slippage`、`OftSlippage`、`ZeroAddress`、`ExchangeFailed`、`FeeExceedsAmount`、`ClaimFailed`、`ReentrancyGuardReentrantCall`、`UnknownDestChain`、`BridgeTokenMustBeUsdt`、`NativeFeeMismatch`。
 
 ---
 
@@ -323,4 +343,4 @@ ERC20 / ETH 同样用汇编打包 selector。`approve` 先置 0，兼容 USDT。
 - 非 6 位小数代币可用；2 bps 仍按该币最小单位对 `amountIn` 计。
 - 本合约无签名与 nonce，重放防护由调用方自行保证。
 - `claimFee` 的 `amount==1` 表示全部，无法精确提取 1 个最小单位。
-- 3pool 兑出可能比询价少 1 wei；本地源码会把 OFT `minAmountLD` 夹到 `amountLD`。若链上字节码较旧，fork 测试里 3pool SwapBridge 仍可能 OFT `Slippage`。
+- 3pool 兑出可能比询价少 1 wei；本地源码会把发给 OFT 的 `minLd` 夹到 `amountLD`，但 `OftSlippage` 仍按调用方 `minAmountLD` 校验。`minAmountOut` / `oftToleranceBps` 请留足余量。
