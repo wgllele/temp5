@@ -3,7 +3,10 @@ pragma solidity >=0.8.28;
 
 /// @title 稳定币兑换与跨链路由
 /// @notice 同链 Curve 兑换；methodType 1/2 经主网 UsdtOFT（LayerZero V2 OFT）`send` 跨出 **USDT**。
-/// @dev 跨链须 `execute{value: nativeFee}`。目的链仅波场：EID `30420` 或 chainId `728126428`。
+/// @dev 主网 Router：`0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`。
+///      跨链须先 `quote` 再 `execute{value: nativeFee}`。目的链仅波场：EID `30420` 或 chainId `728126428`。
+///      `ACROSS_PROTOCOL` 名为历史遗留，实为 ETH UsdtOFT `0x1F748c76…`。反向见 `StablecoinBridgeTron`。
+///      文档：`StablecoinBridgeRouter.md` / `StablecoinBridge.md`。
 contract StablecoinBridgeRouter {
     /// @notice 合约 owner 变更
     event OwnerChanged(address indexed oldOwner, address indexed newOwner);
@@ -59,7 +62,8 @@ contract StablecoinBridgeRouter {
     uint256 public constant METHOD_SWAP_BRIDGE = 1;
     uint256 public constant METHOD_BRIDGE = 2;
 
-    /// @dev 以太坊主网地址。
+    /// @dev 常量名历史遗留：实际是以太坊 UsdtOFT（USDT0 Legacy Mesh），不是 Across SpokePool。
+    ///      波场 peer：`0x3a08F76772e200653bB55c2a92998DAcA62e0e97`（`TFG4wBa…`），见 `StablecoinBridgeTron`。
     address public constant ACROSS_PROTOCOL = 0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0;
     address public constant POOL_3POOL = 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7;
     address public constant POOL_USDC_USDT = 0x4f493B7dE8aAC7d55F71853688b1F7C8F0243C85;

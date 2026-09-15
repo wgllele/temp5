@@ -1,9 +1,10 @@
 # StablecoinBridgeRouter 前端对接
 
-面向钱包 / DApp / 后台发交易。主网参数与业务流程见 [StablecoinBridgeRouter.md](./StablecoinBridgeRouter.md)。
+面向钱包 / DApp / 后台发交易。主网参数与业务流程见 [StablecoinBridgeRouter.md](./StablecoinBridgeRouter.md)；双向总览见 [StablecoinBridge.md](./StablecoinBridge.md)。
 
 **主网 Router：** `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（Ethereum `chainId = 1`）  
-**旧地址 `0x0794…` ABI 已废弃**，不要再用 `feeMode` / `swapFee` / 结构体 `SwapParam`。
+**旧地址 `0x0794…` ABI 已废弃**，不要再用 `feeMode` / `swapFee` / 结构体 `SwapParam`。  
+**波场 → ETH：** [StablecoinBridgeTron](./StablecoinBridgeTron.md) 主网 `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（不在本文对接范围）。
 
 前端只需调：**ERC20 `approve` + `quote`（eth_call）+ `execute`（发交易）**。不要调 UsdtOFT、不要调 Curve。
 

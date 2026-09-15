@@ -3,7 +3,10 @@ pragma solidity >=0.8.11;
 
 /// @title 波场 USDT → 以太坊跨链入口
 /// @notice 只跨链，不 swap。拉 TRC20 USDT → 扣 2 bps → UsdtOFT.send 到以太坊。
-/// @dev 须先 `quote`，再 `execute{value: nativeFee}`（TRX sun）。`msg.value` 必须相等，不退多余 TRX。
+/// @dev 主网：`TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（hex `0x4252aB0602F78706d9091135d6108ab99A4dC43B`）。
+///      须先 `quote`，再 `execute{value: nativeFee}`（TRX sun）。`msg.value` 必须相等，不退多余 TRX。
+///      `quote` 已扣 2 bps 再询 OFT。跨链后再兑走以太坊 Curve 官方池，不经本合约。
+///      旧址 `TTF3ja…`（错误 OFT）已废弃。文档见 `StablecoinBridgeTron.md` / `StablecoinBridge.md`。
 contract StablecoinBridgeTron {
     event OwnerChanged(address indexed oldOwner, address indexed newOwner);
     event Bridge(
@@ -33,7 +36,8 @@ contract StablecoinBridgeTron {
     address public constant USDT = 0xa614f803B6FD780986A42c78Ec9c7f77e6DeD13C;
     /// @dev 以太坊 USDT，仅用于 `destToken` 校验。
     address public constant ETH_USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
-    /// @dev 波场 UsdtOFT（USDT0 Legacy Mesh）。ETH `0x1F748c…dfb0.peers(30420)` → `0x3a08f767…0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`）。
+    /// @dev 波场 UsdtOFT（USDT0 Legacy Mesh）：`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`。
+    ///      等于 ETH UsdtOFT `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0.peers(30420)`（须 EIP-55 校验和）。
     address public constant USDT_OFT = 0x3a08F76772e200653bB55c2a92998DAcA62e0e97;
 
     error OwnableUnauthorizedAccount(address account);
@@ -131,7 +135,13 @@ contract StablecoinBridgeTron {
         return bytes32(uint256(uint160(recipient)));
     }
 
-    /// @notice 询价。`outAmount` 写入 `execute` 的 `destAmount`，`nativeFee`（sun）作 `msg.value`。
+    /// @notice 询价（只读）。先扣 2 bps，再 `quoteOFT` / `quoteSend`。
+    /// @param recipient 以太坊收款地址（非 0）
+    /// @param amountIn 波场 USDT 毛额（含协议费）
+    /// @param destChainId `30101` 或 `1`
+    /// @param destToken `0` 或 ETH USDT；仅校验，不参与发币
+    /// @return outAmount 目的链预计到账 → 写入 `execute.destAmount`
+    /// @return nativeFee TRX sun → 作 `execute` 的 `msg.value`
     function quote(
         address recipient,
         uint256 amountIn,
@@ -146,7 +156,9 @@ contract StablecoinBridgeTron {
         nativeFee = _oftQuoteNativeFee(dstEid, to, usdtAmt, outAmount);
     }
 
-    /// @notice 拉 USDT → 划费 → UsdtOFT.send。`msg.value` 必须等于 `nativeFee`。
+    /// @notice 拉 USDT → 划 2 bps → UsdtOFT.send。`msg.value` 必须等于 `nativeFee`（sun）。
+    /// @param destToken 同 `quote`：`0` 或 ETH USDT，仅校验
+    /// @param destAmount / nativeFee 须用当次 `quote` 原样回填
     function execute(
         address recipient,
         uint256 amountIn,

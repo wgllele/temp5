@@ -11,6 +11,8 @@ Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 
 主网已部署 Router：`0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`。常量 `ACROSS_PROTOCOL` 实际是主网 UsdtOFT `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0`（USDT0 Legacy Mesh），不是 Across SpokePool。旧地址 `0x0794…` ABI 已废弃。
 
+波场反向入口：[StablecoinBridgeTron](./StablecoinBridgeTron.md) 主网 `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`，OFT peer `0x3a08F767…`（`TFG4wBa…`）。
+
 ---
 
 ## 1. 业务架构
@@ -101,7 +103,7 @@ StablecoinBridgeRouter
 | `amountIn` | 拉入数量（含手续费） |
 | `minAmountOut` | Curve 兑出下限（methodType 0/1） |
 | `destChainId` | 仅波场：`30420`（LZ EID）或 `728126428` |
-| `destToken` | 非 0 时必须是 USDT |
+| `destToken` | **不参与发币**。`0` 跳过；非 0 时必须是本链 USDT（断言目的链收 USDT） |
 | `destAmount` | 写入询价 `minAmountLD`；成交时须 ≥ `quoteOFT.amountReceivedLD * 9900/10000` |
 | `nativeFee` | 询价 `quoteSend(..., false)` 的 Wei；跨链时 `msg.value` 必须相等 |
 

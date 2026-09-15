@@ -85,8 +85,10 @@ execute{value: nativeFee}
 
 - `recipient` 填**以太坊** 20 字节地址，不要填波场 `T…`。
 - `destChainId`：`30101`（LZ EID）或 `1`。
+- `destToken`：不参与发币；填 `0` 或 ETH USDT 即可（非 0 时必须是 USDT）。
 - `nativeFee` / `msg.value` 单位是 TRX **sun**。
 - 用户 `approve` 本合约，不是 OFT。
+- `quote` 已扣 2 bps；返回空/`REVERT` 时先核对合约是否为 `TG1tdbbj…` 且 `USDT_OFT` 为波场 peer。
 
 ---
 
@@ -196,7 +198,7 @@ execute{value: nativeFee}  methodType=2
 
 | 名 | 链 | 地址 / 值 |
 |---|---|---|
-| `StablecoinBridgeTron` | 波场 | `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（[tronscan](https://tronscan.org/contract/TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R/code)）；旧址 `TTF3ja…` 废弃 |
+| `StablecoinBridgeTron` | 波场 | `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（hex `0x4252aB0602F78706d9091135d6108ab99A4dC43B`）· [tronscan](https://tronscan.org/contract/TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R/code)；旧址 `TTF3ja…` 废弃 |
 | `StablecoinBridgeRouter` | 以太坊 | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070` |
 | Curve 3pool | 以太坊 | `0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7` |
 | UsdtOFT | 以太坊 | `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0` |
