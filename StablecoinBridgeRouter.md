@@ -344,3 +344,4 @@ ERC20 / ETH 同样用汇编打包 selector。`approve` 先置 0，兼容 USDT。
 - 本合约无签名与 nonce，重放防护由调用方自行保证。
 - `claimFee` 的 `amount==1` 表示全部，无法精确提取 1 个最小单位。
 - 3pool 兑出可能比询价少 1 wei；本地源码会把发给 OFT 的 `minLd` 夹到 `amountLD`，但 `OftSlippage` 仍按调用方 `minAmountLD` 校验。`minAmountOut` / `oftToleranceBps` 请留足余量。
+- **ETH gas（成本敏感，前端责任）：** 合约不设 gas。对接时显式传 `maxPriorityFeePerGas=0`、`maxFeePerGas=baseFee×1.09`（**max = 最低 + 9%**）；勿交给 MetaMask 默认 tip。见 [前端对接 §6 Gas](./StablecoinBridgeRouter.frontend.md)。

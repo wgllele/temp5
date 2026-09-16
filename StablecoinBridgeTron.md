@@ -277,6 +277,7 @@ ERC20：`approve` 先置 0；只检查 call 成功。
 - 本合约无 deadline / nonce，重放由调用方自行保证。
 - 不要 `approve` OFT；不要多付 TRX 指望退款。
 - `USDT_OFT` 必须用 EIP-55 校验和地址编译；波场 peer **不是** ETH 的 `0x1F748c…`。
+- **链上资源费：** 波场侧是 Energy/Bandwidth（或燃烧 TRX），与 ETH `gasPrice` 无关。若同一产品还有以太坊 Router 交易，ETH 侧成本敏感默认：`maxPriorityFeePerGas=0`、`maxFeePerGas=baseFee×1.09`（**max = 最低 + 9%**），见 [前端对接 §6 Gas](./StablecoinBridgeRouter.frontend.md)。
 
 ### 联调检查单
 
@@ -287,5 +288,6 @@ ERC20：`approve` 先置 0；只检查 call 成功。
 - [ ] USDT 先 `approve(0)` 再授权本合约（若原授权非 0）
 - [ ] `minAmountLD = outAmount * (10000 - oftToleranceBps) / 10000`（建议 15～20）；`nativeFee` / `call_value` 与当次 `quote` 一致
 - [ ] 展示 2 bps 协议费 + `outAmount`；**不要**把 `oftToleranceBps` 算进 UI 总滑点
+- [ ]（若含 ETH Router）ETH 交易带 `tip=0` + `maxFee=baseFee×1.09`
 - [ ] 故意抬高 `minAmountLD` 应得到 `OftSlippage`（验证新逻辑）
 - [ ] 若跨后再兑：等 Mesh 到账 → `get_dy` → `approve(3pool)` → `exchange`

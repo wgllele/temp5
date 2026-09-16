@@ -219,6 +219,7 @@ require(amountReceived >= minAmountLD); // 否则 SlippageExceeded
 - `send` 之后到账有 LZ/Mesh 延迟；入口不跟踪目的链确认。
 - 波场 USDT 无 bool 返回：UsdtOFT 在 `LOCAL_EID == TRON` 时用普通 `transfer`。
 - 入口常量 `USDT_OFT` 必须是**本链 peer**，不能把 ETH 地址写到波场（会导致 `quote` revert）。
+- **ETH 入口 gas：** 用户不直调 UsdtOFT；Router 侧成本敏感默认 `maxPriorityFeePerGas=0`、`maxFeePerGas=baseFee×1.09`（**max = 最低 + 9%**），见 [前端对接 §6 Gas](./StablecoinBridgeRouter.frontend.md)。
 
 ### 联调检查单
 
@@ -227,3 +228,4 @@ require(amountReceived >= minAmountLD); // 否则 SlippageExceeded
 - [ ] 入口 `quote` 返回非空 `outAmount` + `nativeFee`
 - [ ] 入口已是最新：`minAmountLD`（非旧 `destAmount`/`OFT_MIN_BPS`）；`msg.value` = 当次 `nativeFee`
 - [ ] 展示分清：入口 2 bps、Mesh `feeBps`、LZ 网络费；UI 滑点只含 Curve
+- [ ] ETH Router：`tip=0` + `maxFee=baseFee×1.09`（勿用钱包默认 tip）

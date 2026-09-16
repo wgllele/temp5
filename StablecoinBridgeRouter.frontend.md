@@ -180,6 +180,20 @@ export function tronBase58ToRecipient(tAddr: string): Address {
 
 LayerZero 若退多余跨链费，退到 **`msg.sender`（当前钱包）**，不是 Router。
 
+### Gas（成本敏感默认：最低 + 9%）
+
+Router **不**设置 gas；若不传 EIP-1559 字段，MetaMask 常自填约 **1～2 gwei tip**（网络空闲时远高于 `baseFee`）。成本敏感用户应 **由前端显式写入** 最低档：
+
+| 字段 | 默认策略 |
+|---|---|
+| `maxPriorityFeePerGas` | **`0`**（最低 tip；个别钱包拒 0 时改 `1n` wei） |
+| `maxFeePerGas` | **当前块 `baseFee × 109 / 100`**（在最低价上加 **9%**，防下一块 baseFee 微涨） |
+
+- 所有 `writeContract`（含 USDT 二次 `approve`、`execute`）都带上同一套费用。
+- UI 预估用 `gasLimit × maxFeePerGas`，并注明「最低档，拥堵时可能稍慢 / 需加速」。
+- 用户仍可在钱包里改高；前端不要再叠 MetaMask「Market」默认 tip。
+- 与 `nativeFee` 无关：跨链垫付是 `tx.value`，不要加进 gas。
+
 ---
 
 ## 7. 调用示例（viem）
@@ -188,6 +202,15 @@ LayerZero 若退多余跨链费，退到 **`msg.sender`（当前钱包）**，�
 import { parseUnits, zeroAddress, type Address, type Hex } from "viem";
 
 const fee = (amountIn: bigint) => (amountIn * 2n) / 10_000n;
+
+/** tip=0；maxFee = baseFee × 1.09（最低 +9%） */
+async function cheapFees() {
+  const block = await publicClient.getBlock({ blockTag: "latest" });
+  const base = block.baseFeePerGas ?? 0n;
+  const maxPriorityFeePerGas = 0n;
+  const maxFeePerGas = (base * 109n) / 100n + maxPriorityFeePerGas;
+  return { maxFeePerGas, maxPriorityFeePerGas };
+}
 
 async function quoteBest(args: {
   methodType: bigint;
@@ -242,6 +265,7 @@ async function swapOnEth(params: {
 
   await ensureApprove(params.tokenIn, amountIn);
 
+  const fees = await cheapFees();
   const hash = await walletClient.writeContract({
     address: ROUTER,
     abi: ROUTER_ABI,
@@ -260,6 +284,7 @@ async function swapOnEth(params: {
       0n,
     ],
     value: 0n,
+    ...fees,
   });
   return hash;
 }
@@ -292,6 +317,7 @@ async function bridgeToTron(params: {
 
   await ensureApprove(params.tokenIn, params.amountIn);
 
+  const fees = await cheapFees();
   return walletClient.writeContract({
     address: ROUTER,
     abi: ROUTER_ABI,
@@ -310,6 +336,7 @@ async function bridgeToTron(params: {
       q.nativeFee,
     ],
     value: q.nativeFee, // 必须相等
+    ...fees,
   });
 }
 ```
@@ -326,12 +353,14 @@ async function ensureApprove(token: Address, amountIn: bigint) {
     args: [owner, ROUTER],
   });
   if (allowance >= amountIn) return;
+  const fees = await cheapFees();
   if (token.toLowerCase() === TOKENS.USDT.address.toLowerCase() && allowance !== 0n) {
     await walletClient.writeContract({
       address: token,
       abi: ERC20_ABI,
       functionName: "approve",
       args: [ROUTER, 0n],
+      ...fees,
     });
   }
   await walletClient.writeContract({
@@ -339,6 +368,7 @@ async function ensureApprove(token: Address, amountIn: bigint) {
     abi: ERC20_ABI,
     functionName: "approve",
     args: [ROUTER, amountIn],
+    ...fees,
   });
 }
 ```
@@ -354,6 +384,7 @@ async function ensureApprove(token: Address, amountIn: bigint) {
 | 协议费 | `amountIn * 2 / 10000`（`tokenIn` 最小单位） |
 | 预计到账 | `quote.outAmount`（只兑 = `tokenOut`；跨链 = 波场预计到账，已含 Mesh） |
 | 跨链网络费 | `formatEther(nativeFee)` ETH，需随交易垫付 |
+| Gas（预估） | `gasLimit × maxFeePerGas`；默认 `tip=0`、`maxFee=baseFee×1.09`（见 §6 Gas） |
 | UI「滑点」 | **仅** Curve：`minAmountOut`（`curveSlippageBps`）。OFT 的 `minAmountLD` / `oftToleranceBps` 是报价保底，**不要算进总滑点** |
 
 成交后：
@@ -391,6 +422,7 @@ async function ensureApprove(token: Address, amountIn: bigint) {
 
 - 不要 `approve` UsdtOFT 或 Curve。
 - 不要把 `quote.nativeFee` 加在 gasPrice 上；它是 `tx.value`。
+- 不要省略 `maxFeePerGas` / `maxPriorityFeePerGas` 交给钱包默认 tip（成本敏感场景应 `tip=0` + `baseFee×1.09`）。
 - 不要多付 ETH 指望退款（Router **不退** `msg.value` 差额）。
 - 不要传 `feeMode` / `swapFee` / `fillDeadline` / 结构体。
 - 不要对接 `0x4A760E…` / `0x0794…`。
@@ -402,6 +434,7 @@ async function ensureApprove(token: Address, amountIn: bigint) {
 
 - [ ] `chainId === 1`，`to === 0xcda2c4eaC941F9d4b6003bCeEbF3d2C5805AD121`
 - [ ] USDT 二次 approve（非 0 → 先 0）
+- [ ] `approve` / `execute` 均带 `cheapFees()`（`tip=0`，`maxFee=baseFee×1.09`）
 - [ ] USDC↔USDT 两次 `quote` 再选池
 - [ ] 只兑 `value = 0`
 - [ ] 跨链 T 地址去掉 `41`；`minAmountLD` 按报价打折；`nativeFee`/`value` 与 quote 一致

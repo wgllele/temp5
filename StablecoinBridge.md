@@ -221,6 +221,7 @@ execute{value: nativeFee}  methodType=2
 
 - 询价到上链之间池 / Mesh 费会变；过期重新 `quote`。`minAmountLD` / `nativeFee` / `msg.value` 用当次报价（`minAmountLD` 为打折后下限）。
 - UI：「滑点」只对应 Curve `minAmountOut`；跨链 `oftToleranceBps` → `minAmountLD` 单独默认即可，不要合成总滑点。
+- **ETH gas（成本敏感）：** 前端显式传 `maxPriorityFeePerGas=0`、`maxFeePerGas=baseFee×1.09`（**max = 最低 + 9%**）；勿交给 MetaMask 默认 tip。详见 [前端对接 §6 Gas](./StablecoinBridgeRouter.frontend.md)。
 - `send` 之后不跟踪；到账按 UsdtOFT / LayerZero / Mesh，有延迟。
 - LayerZero 若退多余跨链费，退到 `msg.sender`，不是跨链合约。
 - 协议费留在合约内，不打给用户；展示到账用 `quote.outAmount`。
