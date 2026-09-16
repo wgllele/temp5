@@ -2,9 +2,9 @@
 
 面向钱包 / DApp / 后台发交易。主网参数与业务流程见 [StablecoinBridgeRouter.md](./StablecoinBridgeRouter.md)；双向总览见 [StablecoinBridge.md](./StablecoinBridge.md)。
 
-**主网 Router：** `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（Ethereum `chainId = 1`）——对接前确认链上 ABI 已是 `minAmountLD`（非旧 `destAmount`/`OFT_MIN_BPS`）；否则用本仓库源码重发后改配置。  
-**旧地址 `0x0794…` ABI 已废弃**，不要再用 `feeMode` / `swapFee` / 结构体 `SwapParam`。  
-**波场 → ETH：** [StablecoinBridgeTron](./StablecoinBridgeTron.md)——旧 `TG1tdbbj…` 勿用，须最新源码重发。
+**主网 Router：** [`0xcda2c4eaC941F9d4b6003bCeEbF3d2C5805AD121`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code)（Ethereum `chainId = 1`）  
+**旧地址 `0x4A760E…` / `0x0794…` 已废弃**，不要再用 `feeMode` / `swapFee` / 结构体 `SwapParam` / `destAmount`+`OFT_MIN_BPS`。  
+**波场 → ETH：** [StablecoinBridgeTron](./StablecoinBridgeTron.md) 主网 [`TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7`](https://tronscan.org/contract/TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7/code)。
 
 前端只需调：**ERC20 `approve` + `quote`（eth_call）+ `execute`（发交易）**。不要调 UsdtOFT、不要调 Curve。
 
@@ -27,7 +27,7 @@
 ## 2. 常量（写进配置即可）
 
 ```ts
-export const ROUTER = "0x4A760E4c0Af6F369E07A97C5ED75E626c1369070" as const;
+export const ROUTER = "0xcda2c4eaC941F9d4b6003bCeEbF3d2C5805AD121" as const;
 export const CHAIN_ID = 1;
 
 export const PROTOCOL_FEE_BPS = 2n;
@@ -393,14 +393,14 @@ async function ensureApprove(token: Address, amountIn: bigint) {
 - 不要把 `quote.nativeFee` 加在 gasPrice 上；它是 `tx.value`。
 - 不要多付 ETH 指望退款（Router **不退** `msg.value` 差额）。
 - 不要传 `feeMode` / `swapFee` / `fillDeadline` / 结构体。
-- 不要对接 `0x0794…`。
+- 不要对接 `0x4A760E…` / `0x0794…`。
 - 前端不要调 `setOwner` / `setFeeRecipient` / `claimFee`（仅管理员）。
 
 ---
 
 ## 11. 联调检查单
 
-- [ ] `chainId === 1`，`to === 0x4A76…`
+- [ ] `chainId === 1`，`to === 0xcda2c4eaC941F9d4b6003bCeEbF3d2C5805AD121`
 - [ ] USDT 二次 approve（非 0 → 先 0）
 - [ ] USDC↔USDT 两次 `quote` 再选池
 - [ ] 只兑 `value = 0`

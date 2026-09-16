@@ -1,6 +1,6 @@
 # StablecoinBridgeRouter fork 测试（旧 trace，勿对照）
 
-下列 traces 为旧 ABI / 旧地址 `0x0794…` 的 Foundry `-vvvv` 输出，**不能**用来对接当前主网 Router `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（固定 2 bps、无 `feeMode`/`swapFee`）。请以 `StablecoinBridgeRouter.md` 与 `test/StablecoinBridgeRouter.fork.t.sol` 为准。
+下列 traces 为旧 ABI / 旧地址 `0x0794…` 的 Foundry `-vvvv` 输出，**不能**用来对接当前主网 Router [`0xcda2c4ea…AD121`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code)（`0x4A760E…` 亦已废弃；固定 2 bps、无 `feeMode`/`swapFee`）。请以 `StablecoinBridgeRouter.md` 与 `test/StablecoinBridgeRouter.fork.t.sol` 为准。
 `SwapParam` 字段顺序：`swapType, methodType, fillDeadline, swapFee, …, destAmount, nativeFee`。
 跨链仅波场；route 1 为 USDC→USDT 后 UsdtOFT `send`；route 2 为 USDT 直接 `send`。
 本金约 **10000** USDT/USDC；比例费 **万分之一**（`feeRate=100`）；固定费 **1**。

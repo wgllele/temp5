@@ -15,8 +15,8 @@
 | UsdtOFT peer | 波场 | `0x3a08F76772e200653bB55c2a92998DAcA62e0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`） |
 | 底层 USDT | 以太坊 | `0xdAC17F958D2ee523a2206206994597C13D831ec7` |
 | 底层 USDT | 波场 | `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`（`0xa614f803…`） |
-| 我们的 Router | 以太坊 | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（常量名 `ACROSS_PROTOCOL` 指向本 UsdtOFT） |
-| 我们的 BridgeTron | 波场 | 最新源码待重发（旧 `TG1tdbbj…` 含错误 `OFT_MIN_BPS`，勿对接） |
+| 我们的 Router | 以太坊 | [`0xcda2c4eaC941F9d4b6003bCeEbF3d2C5805AD121`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code)（常量名 `ACROSS_PROTOCOL` 指向本 UsdtOFT） |
+| 我们的 BridgeTron | 波场 | [`TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7`](https://tronscan.org/contract/TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7/code) |
 
 双向 peer：
 

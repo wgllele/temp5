@@ -15,14 +15,14 @@ Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 
 | | 地址 | 说明 |
 |---|---|---|
-| **源码（本仓库最新）** | 待确认是否已重发 | `execute(..., minAmountLD, nativeFee)` + `OftSlippage`；**无** `OFT_MIN_BPS` / `destAmount` |
-| **链上** | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070` | 若仍为旧字节码（`destAmount` + `OFT_MIN_BPS`），对接前须重发并换地址 |
+| **以太坊主网（当前）** | [`0xcda2c4eaC941F9d4b6003bCeEbF3d2C5805AD121`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code) | `minAmountLD` + `OftSlippage` |
 | UsdtOFT | `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0` | 常量名 `ACROSS_PROTOCOL`（历史遗留） |
+| 废弃 | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070` | 旧 `destAmount` / `OFT_MIN_BPS` |
 | 废弃 | `0x0794…` | 旧 `SwapParam` / feeMode ABI |
 
 常量 `ACROSS_PROTOCOL` 实际是主网 UsdtOFT（USDT0 Legacy Mesh），不是 Across SpokePool。
 
-波场反向入口：[StablecoinBridgeTron](./StablecoinBridgeTron.md)——`TG1tdbbj…` 为旧版，**须用最新源码重发**；OFT peer `0x3a08F767…`（`TFG4wBa…`）。
+波场反向入口：[StablecoinBridgeTron](./StablecoinBridgeTron.md) 主网 [`TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7`](https://tronscan.org/contract/TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7/code)；OFT peer `0x3a08F767…`（`TFG4wBa…`）。旧 `TG1tdbbj…` 废弃。
 
 ---
 
@@ -256,7 +256,7 @@ USDC↔USDT 应 **`eth_call` `quote` 对各 `swapType` 询价后取优**（见 5
 
 ### 5.1 主网 fork 实测（USDT→USDC，进池金额为扣 2 bps 协议费后的净额）
 
-损耗 = `1 - 兑出USDC/进池USDT`，单位 bps。数字来自 2026-09-12 主网 fork（与链上 `0x4A76…` 同逻辑），池状态变了会变。
+损耗 = `1 - 兑出USDC/进池USDT`，单位 bps。数字来自 2026-09-12 主网 fork（池逻辑不变；部署地址以当前主网为准），池状态变了会变。
 
 | 路径 | 进池 USDT | 出 USDC | 仅池损耗 |
 |---|---|---|---|

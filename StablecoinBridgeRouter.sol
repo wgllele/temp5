@@ -3,10 +3,10 @@ pragma solidity >=0.8.28;
 
 /// @title 稳定币兑换与跨链路由
 /// @notice 同链 Curve 兑换；methodType 1/2 经主网 UsdtOFT（LayerZero V2 OFT）`send` 跨出 **USDT**。
-/// @dev 主网旧 Router：`0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（若仍含 `OFT_MIN_BPS`/`destAmount` 须重发）。
+/// @dev 主网：[`0xcda2c4eaC941F9d4b6003bCeEbF3d2C5805AD121`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code)。
 ///      跨链须先 `quote` 再 `execute{value: nativeFee}`。目的链仅波场：EID `30420` 或 chainId `728126428`。
 ///      `ACROSS_PROTOCOL` 名为历史遗留，实为 ETH UsdtOFT `0x1F748c76…`。反向见 `StablecoinBridgeTron`。
-///      文档：`StablecoinBridgeRouter.md` / `StablecoinBridge.md`。
+///      旧址 `0x4A760E…` / `0x0794…` 已废弃。文档：`StablecoinBridgeRouter.md` / `StablecoinBridge.md`。
 contract StablecoinBridgeRouter {
     /// @notice 合约 owner 变更
     event OwnerChanged(address indexed oldOwner, address indexed newOwner);

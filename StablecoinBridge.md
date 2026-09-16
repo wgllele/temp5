@@ -89,7 +89,7 @@ execute{value: nativeFee}
 - `nativeFee` / `msg.value` 单位是 TRX **sun**。
 - 用户 `approve` 本合约，不是 OFT。
 - 成交：`quoteOFT ≥ minAmountLD`，否则 `OftSlippage`。
-- **部署：** 用本仓库最新源码重发；链上旧址 `TG1tdbbj…`（`destAmount` + `OFT_MIN_BPS`）勿用。`quote` 空/`REVERT` 时先核对 `USDT_OFT` 是否为波场 peer `0x3a08F767…`。
+- **部署：** 主网 [`TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7`](https://tronscan.org/contract/TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7/code)。旧址 `TG1tdbbj…` / `TTF3ja…` 勿用。`quote` 空/`REVERT` 时先核对 `USDT_OFT` 是否为波场 peer `0x3a08F767…`。
 
 ---
 
@@ -199,8 +199,8 @@ execute{value: nativeFee}  methodType=2
 
 | 名 | 链 | 地址 / 值 |
 |---|---|---|
-| `StablecoinBridgeTron` | 波场 | **最新源码待重发**；旧 `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（错误 `OFT_MIN_BPS`）废弃对接；更旧 `TTF3ja…` 亦废弃 |
-| `StablecoinBridgeRouter` | 以太坊 | `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`（确认是否已含 `minAmountLD`；否则重发） |
+| `StablecoinBridgeTron` | 波场 | [`TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7`](https://tronscan.org/contract/TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7/code)（hex `0x8084a8E9C8508c4918e23ae16Df06e061BcA7485`）；旧 `TG1tdbbj…` / `TTF3ja…` 废弃 |
+| `StablecoinBridgeRouter` | 以太坊 | [`0xcda2c4eaC941F9d4b6003bCeEbF3d2C5805AD121`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code)；旧 `0x4A760E…` / `0x0794…` 废弃 |
 | Curve 3pool | 以太坊 | `0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7` |
 | UsdtOFT | 以太坊 | `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0` |
 | UsdtOFT | 波场 peer | `0x3a08F76772e200653bB55c2a92998DAcA62e0e97`（`TFG4wBaDQ8sHWWP1ACeSGnoNR6RRzevLPt`） |
@@ -225,4 +225,4 @@ execute{value: nativeFee}  methodType=2
 - LayerZero 若退多余跨链费，退到 `msg.sender`，不是跨链合约。
 - 协议费留在合约内，不打给用户；展示到账用 `quote.outAmount`。
 - 部署后 `setFeeRecipient` 再 `claimFee`。
-- **两端入口均须确认链上字节码已是 `minAmountLD` + `OftSlippage` 版本后再切流量。**
+- **波场** [`TMgkQyjZb…`](https://tronscan.org/contract/TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7/code)；**以太坊** [`0xcda2c4ea…`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code)（均为 `minAmountLD` + `OftSlippage` 版本）。

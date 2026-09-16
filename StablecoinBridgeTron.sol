@@ -3,11 +3,10 @@ pragma solidity >=0.8.11;
 
 /// @title 波场 USDT → 以太坊跨链入口
 /// @notice 只跨链，不 swap。拉 TRC20 USDT → 扣 2 bps → UsdtOFT.send 到以太坊。
-/// @dev 主网旧址 `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R` 为 `destAmount`+`OFT_MIN_BPS` 旧字节码，已废弃对接。
-///      须用本文件最新源码重新部署后更新文档地址。`USDT_OFT` 须为波场 peer `0x3a08F767…`。
+/// @dev 主网：`TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7`（hex `0x8084a8E9C8508c4918e23ae16Df06e061BcA7485`）。
 ///      须先 `quote`，再 `execute{value: nativeFee}`（TRX sun）。`msg.value` 必须相等，不退多余 TRX。
 ///      `quote` 已扣 2 bps 再询 OFT。跨链后再兑走以太坊 Curve 官方池，不经本合约。
-///      更旧址 `TTF3ja…`（错误 OFT）已废弃。文档见 `StablecoinBridgeTron.md` / `StablecoinBridge.md`。
+///      旧址 `TG1tdbbj…`（`OFT_MIN_BPS`）/ `TTF3ja…`（错误 OFT）已废弃。文档见 `StablecoinBridgeTron.md`。
 contract StablecoinBridgeTron {
     event OwnerChanged(address indexed oldOwner, address indexed newOwner);
     event Bridge(

@@ -1,6 +1,6 @@
 # StablecoinBridgeRouter 小额 fork 测试（旧 trace，勿对照）
 
-下列 traces 为旧 ABI / 旧地址 `0x0794…` 的输出，**不能**用来对接当前主网 Router `0x4A760E4c0Af6F369E07A97C5ED75E626c1369070`。请以 `StablecoinBridgeRouter.md` 与 `test/StablecoinBridgeRouter.small.fork.t.sol` 为准。
+下列 traces 为旧 ABI / 旧地址 `0x0794…` 的输出，**不能**用来对接当前主网 Router [`0xcda2c4ea…AD121`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code)（`0x4A760E…` 亦已废弃）。请以 `StablecoinBridgeRouter.md` 与 `test/StablecoinBridgeRouter.small.fork.t.sol` 为准。
 本金 **10** USDT/USDC；USDC↔USDT 一律 `swapType=1`（NG，小额协议汇率更好）；比例费 **万分之一**（`feeRate=100`，本金 10 扣 0.001）；固定费 **1**。
 跨链仅波场。边上是 Transfer / OFT 到账数量。traces 自动换行。顺序：Rate → Fixed → Free。
 

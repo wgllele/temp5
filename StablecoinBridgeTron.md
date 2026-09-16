@@ -10,16 +10,16 @@ Solidity `>=0.8.11`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 
 成交校验：`quoteOFT.amountReceivedLD ≥ minAmountLD`，否则 `OftSlippage`（**不是** Curve 的 `Slippage`；**不算** UI「总滑点」）。
 
-### 部署状态（重要）
+### 部署状态
 
 | | 地址 | 说明 |
 |---|---|---|
-| **源码（本仓库最新）** | 未上链 / 待发 | `execute(..., minAmountLD, nativeFee)` + `OftSlippage`；**无** `OFT_MIN_BPS` |
-| **链上旧版** | `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R`（hex `0x4252aB…C43B`） | 仍为旧 ABI：`destAmount` + 错误逻辑 `destAmount ≥ quoted×99%`（`OFT_MIN_BPS`），**勿再对接**；须用本仓库源码**重新部署**后更新下表 |
-| **USDT_OFT** | `0x3a08F76772e200653bB55c2a92998DAcA62e0e97`（`TFG4wBa…`） | = ETH `0x1F748c76…dfb0.peers(30420)`；常量正确 |
+| **波场主网（当前）** | [`TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7`](https://tronscan.org/contract/TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7/code)（hex `0x8084a8E9C8508c4918e23ae16Df06e061BcA7485`） | 最新：`minAmountLD` + `OftSlippage` |
+| **USDT_OFT** | `0x3a08F76772e200653bB55c2a92998DAcA62e0e97`（`TFG4wBa…`） | = ETH `0x1F748c76…dfb0.peers(30420)` |
+| 废弃 | `TG1tdbbj4crisqw6DZPeApAFnUE72mYh5R` | 旧 ABI：`destAmount` + `OFT_MIN_BPS`（方向错误） |
 | 废弃 | `TTF3jaLnaMLhZwQ32J89jXuSkFwrtSKG8t` | 曾误写 ETH OFT，`quote` revert |
 
-旧版致命逻辑（勿再使用）在 `_oftSend`：`if (destAmount < quoted * 9900/10000) revert Slippage`——方向反了。新版为 `if (quoted < minAmountLD) revert OftSlippage`。
+旧版致命逻辑（勿再使用）：`if (destAmount < quoted * 9900/10000) revert Slippage`。当前为 `if (quoted < minAmountLD) revert OftSlippage`。
 
 ---
 
@@ -78,7 +78,7 @@ USDT、ETH_USDT、USDT_OFT 为 **public constant**。可变状态：`_owner`、`
 
 | | StablecoinBridgeRouter | StablecoinBridgeTron |
 |---|---|---|
-| 部署链 | 以太坊（源码最新；链上 `0x4A760E…` 若未重发则为旧 ABI） | 波场（**须重发**；`TG1tdbbj…` 为旧版） |
+| 部署链 | 以太坊主网 `0xcda2c4ea…AD121` | 波场主网 `TMgkQyjZb…YduV7` |
 | 方向 | ETH → 波场（合约内可兑再跨） | 波场 → ETH（只跨） |
 | swap | `methodType=0/1` 在合约内调 Curve | **本合约无 swap**；到账后再兑走官方 3pool |
 | `msg.value` | ETH wei | TRX sun |
@@ -94,7 +94,7 @@ USDT、ETH_USDT、USDT_OFT 为 **public constant**。可变状态：`_owner`、`
 execute(address recipient, uint256 amountIn, uint256 destChainId, address destToken, uint256 minAmountLD, uint256 nativeFee) payable returns (uint256)
 ```
 
-旧版参数名 `destAmount` 且带 `OFT_MIN_BPS` 校验，**选择器/语义均不同**，前端须换新地址。
+旧版参数名 `destAmount` 且带 `OFT_MIN_BPS` 校验（如 `TG1tdbbj…`），**勿对接**。
 
 ---
 
@@ -280,7 +280,7 @@ ERC20：`approve` 先置 0；只检查 call 成功。
 
 ### 联调检查单
 
-- [ ] 已用**本仓库最新源码**重新部署；勿用 `TG1tdbbj…` 旧字节码
+- [ ] 合约为 [`TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7`](https://tronscan.org/contract/TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7/code)；勿用 `TG1tdbbj…` / `TTF3ja…`
 - [ ] 部署后 `setFeeRecipient`；链上 `USDT_OFT() == 0x3a08F767…`
 - [ ] `quote` 有非空 `constant_result`（`outAmount` + `nativeFee`）
 - [ ] `recipient` 为有效 ETH 地址
