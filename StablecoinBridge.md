@@ -225,5 +225,6 @@ execute{value: nativeFee}  methodType=2
 - `send` 之后不跟踪；到账按 UsdtOFT / LayerZero / Mesh，有延迟。
 - LayerZero 若退多余跨链费，退到 `msg.sender`，不是跨链合约。
 - 协议费留在合约内，不打给用户；展示到账用 `quote.outAmount`。
-- 部署后 `setFeeRecipient` 再 `claimFee`。
+- 部署后 `setFeeRecipient` 再 `claimFee`。`feeRecipient` 只收协议费，不能用来改 UsdtOFT。
+- **USDT0 合约地址变更：** 不在旧入口上热更新。重新部署并把常量写成新地址，前端改指向新入口。利弊见 [UsdtOFT §10](./UsdtOFT.md)。只改 `peers` / 费率 / 额度时不用重新部署。
 - **波场** [`TMgkQyjZb…`](https://tronscan.org/contract/TMgkQyjZb11XJBVH2aqnKrxhot4erYduV7/code)；**以太坊** [`0xcda2c4ea…`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code)（均为 `minAmountLD` + `OftSlippage` 版本）。

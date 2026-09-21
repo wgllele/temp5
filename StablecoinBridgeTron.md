@@ -4,7 +4,7 @@ Solidity `>=0.8.11`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)�
 
 **本合约只跨、不兑：** 拉 TRC20 USDT → 扣协议费留在本合约 → UsdtOFT `send` → 以太坊 USDT。失败整笔回滚；累计手续费与滞留资产由 owner `claimFee` 提出。
 
-**跨链到账后再兑：** 不在本合约内。可选：以太坊 **Curve 官方 3pool** `approve` + `exchange`（§4.5，不收我们的 2 bps）；或到账后走 Router `methodType=0` 收费兑换（见总览）。波场侧不做 swap。
+**跨链到账后再兑：** 不在本合约内。可选：以太坊 **Curve 官方 3pool** `approve` + `exchange`（不收我们的 2 bps）；或到账后走 Router `methodType=0` 收费兑换（见总览）。波场侧不做 swap。
 
 必须先 `quote`，`nativeFee` 原样写入 `execute`；`minAmountLD = quote.outAmount` 链下按 `oftToleranceBps` 打折，再 `execute{value: nativeFee}`。`msg.value` 必须 **等于** `nativeFee`（单位 TRX **sun**），合约 **不退** 多余 TRX。`quote` 已按毛额扣 **2 bps** 再询 OFT。
 

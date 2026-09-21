@@ -212,13 +212,58 @@ require(amountReceived >= minAmountLD); // 否则 SlippageExceeded
 
 ---
 
-## 10. 对接注意
+## 10. USDT0 地址会不会变，以及我们怎么换
+
+当前波场 ↔ 以太坊走的是 **Legacy Mesh**，不是官方文档里那套可升级的原生 OFT Adapter。
+
+| | 地址 | 能不能就地改 |
+|---|---|---|
+| 以太坊 UsdtOFT（入口常量） | `0x1F748c76dE468e9D11bd340fA9D5CBADf315dFB0` | 合约地址不变。不是代理，没有 `upgradeTo`。owner 可以 `setPeer` 改对手方 |
+| 波场 peer | `0x3a08F76772e200653bB55c2a92998DAcA62e0e97` | 同上，由对端 `peers` 指向 |
+| 原生 USDT0 OFT Adapter（不走波场） | `0x6C96dE32CEa08842dcc4058c14d3aaAD7Fa41dee` | 另一套合约。以太坊 → Arbitrum 等用它，**不要**写进 Router / BridgeTron |
+| 底层 USDT | 以太坊 `0xdAC17F95…` / 波场 `TR7NHqje…` | 不换 |
+
+USDT0 文档写明：Legacy Mesh 升级时**整套合约迁到新地址**，旧地址不会就地升级。只改 `peers`、`feeBps`、额度时，入口不用动。换的是 UsdtOFT **合约地址**时，才要换我们的入口。
+
+Router 的 `ACROSS_PROTOCOL`、BridgeTron 的 `USDT_OFT` 都是 `constant`。用户 `approve` 的是入口，入口再把 USDT 授权并转给这个写死的地址。
+
+### 不采用：管理员动态修改 USDT0 地址
+
+给入口加 `setUsdtOft`，Mesh 迁移时 owner 改一笔存储，前端和合约地址都不用动。
+
+| 利 | 弊 |
+|---|---|
+| 迁移快，集成方不用换入口地址 | 用户信任的不再是字节码，而是 owner 以后每次改地址都不作恶 |
+| 旧入口上的进行中交易可以继续 | owner 可以把地址改成自己的合约。用户已经 `approve` 了入口，下一笔 `execute` 的**本金**会被转走 |
+| | 和 `setFeeRecipient` 不是一回事。`feeRecipient` 只收已扣下的协议费；改 USDT0 动的是用户这笔跨链的全额 |
+| | USDT0 自己的 owner 本来就能 `setPeer`。那是对方的权限。我们再加一个可改地址，是多一层只有我们能用的权限 |
+
+所以不做热更新，也不做时间锁后再改。时间锁只是把「随时能改」变成「过一段时间能改」，本金仍然可以被改去向。
+
+### 采用：重新部署入口，前端改指向
+
+Mesh 换新合约后：
+
+1. 新编译 Router / BridgeTron，常量写成**新的**本链 UsdtOFT。以太坊、波场各部署一份。
+2. 新合约 `setFeeRecipient`。
+3. 前端和调用方改成新入口地址。只改前端、仍调旧入口，不够：旧字节码里的 USDT0 地址不会变。
+4. 旧入口留在链上，不要再让用户 `approve`。对它再 `execute`，只会打到旧 UsdtOFT；旧通道停了就失败，不会把币打到管理员后来指定的地址。
+
+| 利 | 弊 |
+|---|---|
+| 地址在字节码里，部署后谁也改不了收款的 OFT | 入口地址变了，前端和所有集成都要改 |
+| 已到账的 USDT 在用户钱包，不锁在我们合约里 | 要重新部署、重新设 `feeRecipient`；过渡期新旧入口并存，旧的必须标废弃 |
+| 旧合约最多是跨链失败，不能被改道 | 询价若还打旧入口，Mesh 迁移后会失败，要切到新入口再 `quote` |
+
+---
+
+## 11. 对接注意
 
 - 不要让用户 `approve` UsdtOFT；只 approve Router / BridgeTron。
 - `nativeFee` / `msg.value` 必须用当次 `quoteSend`；入口合约要求严格相等且不退多余。
 - `send` 之后到账有 LZ/Mesh 延迟；入口不跟踪目的链确认。
 - 波场 USDT 无 bool 返回：UsdtOFT 在 `LOCAL_EID == TRON` 时用普通 `transfer`。
-- 入口常量 `USDT_OFT` 必须是**本链 peer**，不能把 ETH 地址写到波场（会导致 `quote` revert）。
+- 入口常量 `USDT_OFT` 必须是**本链 peer**，不能把 ETH 地址写到波场（会导致 `quote` revert）。合约地址要换时走 [§10](#10-usdt0-地址会不会变以及我们怎么换)，不要加管理员 setter。
 - **ETH 入口 gas：** 用户不直调 UsdtOFT；Router 侧成本敏感默认 `maxPriorityFeePerGas=0`、`maxFeePerGas=baseFee×1.09`（**max = 最低 + 9%**），见 [前端对接 §6 Gas](./StablecoinBridgeRouter.frontend.md)。
 
 ### 联调检查单
