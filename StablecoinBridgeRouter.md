@@ -1,6 +1,6 @@
 # StablecoinBridgeRouter
 
-Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)。前端对接见 [StablecoinBridgeRouter.frontend.md](./StablecoinBridgeRouter.frontend.md)。
+Solidity `>=0.8.28`。整体路径见 [StablecoinBridge](./StablecoinBridge.md)。前端对接见 [StablecoinBridgeRouter.frontend.md](./StablecoinBridgeRouter.frontend.md)。只读询价（失败不 revert）见 [StablecoinBridgeQuery](./StablecoinBridgeQuery.md)。
 
 单笔路由：从调用方拉入 `tokenIn`（仅列出的稳定币），先划出协议费并留在本合约。三条路径都是 **approve 本合约 + execute**（用户不直接调 Curve / OFT）：
 

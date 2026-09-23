@@ -1,6 +1,6 @@
 # StablecoinBridgeRouter 前端对接
 
-面向钱包 / DApp / 后台发交易。主网参数与业务流程见 [StablecoinBridgeRouter.md](./StablecoinBridgeRouter.md)；双向总览见 [StablecoinBridge.md](./StablecoinBridge.md)。
+面向钱包 / DApp / 后台发交易。主网参数与业务流程见 [StablecoinBridgeRouter.md](./StablecoinBridgeRouter.md)；双向总览见 [StablecoinBridge.md](./StablecoinBridge.md)。扫池 / 失败返回 0 的只读查询见 [StablecoinBridgeQuery](./StablecoinBridgeQuery.md)。
 
 **主网 Router：** [`0xcda2c4eaC941F9d4b6003bCeEbF3d2C5805AD121`](https://etherscan.io/address/0xcda2c4eac941f9d4b6003bceebf3d2c5805ad121#code)（Ethereum `chainId = 1`）  
 **旧地址 `0x4A760E…` / `0x0794…` 已废弃**，不要再用 `feeMode` / `swapFee` / 结构体 `SwapParam` / `destAmount`+`OFT_MIN_BPS`。  
