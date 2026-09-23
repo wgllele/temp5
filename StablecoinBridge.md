@@ -9,7 +9,7 @@
 - **波场 → 以太坊之后** 再兑换、且不经过我们收费：用户直接对 Curve 官方池 `approve` + `exchange`。
 - 波场侧不 swap。
 
-合约文档：[StablecoinBridgeTron](./StablecoinBridgeTron.md)（波场→ETH，只跨）· [StablecoinBridgeRouter](./StablecoinBridgeRouter.md)（ETH 只兑收费、ETH→波场）· [前端对接](./StablecoinBridgeRouter.frontend.md)· [UsdtOFT 通道详解](./UsdtOFT.md)
+合约文档：[StablecoinBridgeTron](./StablecoinBridgeTron.md)（波场→ETH，只跨）· [StablecoinBridgeRouter](./StablecoinBridgeRouter.md)（ETH 只兑收费、ETH→波场）· [前端对接](./StablecoinBridgeRouter.frontend.md)· [UsdtOFT 通道详解](./UsdtOFT.md)· [审计回应](./StablecoinBridge.audit-response.md)
 
 ---
 
